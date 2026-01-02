@@ -1,3 +1,5 @@
+import type { BrowsingStatsPeriod } from "../schemas/browsing.schemas";
+
 /**
  * Returns 'YYYY-MM-DD' in the given IANA timezone.
  * Uses en-CA locale which produces YYYY-MM-DD natively — no string manipulation needed.
@@ -40,6 +42,34 @@ export function getMonthStartString(
 }
 
 /**
+ * Inclusive calendar bounds (YYYY-MM-DD in `timezone`) for breakdown stats.
+ * `all` → no date filter (both null).
+ */
+export function getStatsPeriodDateBounds(
+  period: BrowsingStatsPeriod,
+  timezone: string,
+  anchorDate?: string,
+): { from: string | null; to: string | null } {
+  const now = new Date();
+  const todayStr = toDateString(now, timezone);
+
+  if (period === "all") {
+    return { from: null, to: null };
+  }
+  if (period === "today") {
+    const d = anchorDate ?? todayStr;
+    return { from: d, to: d };
+  }
+  if (period === "week") {
+    return { from: getMondayString(now, timezone), to: todayStr };
+  }
+  if (period === "month") {
+    return { from: getMonthStartString(now, timezone), to: todayStr };
+  }
+  return { from: todayStr, to: todayStr };
+}
+
+/**
  * Returns a Date (UTC instant) representing midnight at the start of the given
  * date string (YYYY-MM-DD) in the given IANA timezone.
  */
@@ -70,6 +100,16 @@ export function startOfDateInTimezone(dateStr: string, timezone: string): Date {
  * Only checks 00:00–00:windowMinutes — never before the day ends (23:30–23:59).
  * Uses formatToParts — no locale-dependent string parsing.
  */
+/** Local calendar hour 0–23 for `date` in the given IANA timezone. */
+export function hourOfDayInTimezone(date: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  return Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+}
+
 export function isAtMidnight(
   tz: string,
   windowMinutes: number = 30,
