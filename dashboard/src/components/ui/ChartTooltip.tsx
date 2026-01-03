@@ -1,7 +1,7 @@
 export interface ChartTooltipRow {
   color: string;
   label: string;
-  value: number;
+  value: string | number;
 }
 
 export interface ChartTooltipProps {
