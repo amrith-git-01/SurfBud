@@ -1,6 +1,7 @@
 import React, { createContext, useEffect, useState, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { useAuthStore } from '@/stores/auth.store';
+import { waitForApiHealth } from '@/utils/waitForApiHealth';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -22,18 +23,21 @@ interface SocketProviderProps {
   children: React.ReactNode;
 }
 
+const SOCKET_RECONNECT_ATTEMPTS = 15;
+const SOCKET_RECONNECT_DELAY_MS = 1000;
+const SOCKET_RECONNECT_DELAY_MAX_MS = 8000;
+
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [socket, setSocket] = useState<TypedSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const { accessToken } = useAuthStore();
   const socketRef = useRef<TypedSocket | null>(null);
   const hasLoggedConnectErrorRef = useRef(false);
+  const connectGenerationRef = useRef(0);
 
   useEffect(() => {
-    // Connect whenever a valid access token exists.
-    // `isAuthenticated` is not persisted, so token is the reliable source after reload.
     if (!accessToken) {
-      // Disconnect if already connected
+      connectGenerationRef.current += 1;
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
@@ -43,12 +47,10 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       return;
     }
 
-    // Get API URL from environment
     const apiUrl =
       (import.meta.env['VITE_API_URL'] as string | undefined) ??
       'http://localhost:3001';
 
-    // Guard against stale duplicate sockets when token refreshes or strict mode remounts.
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
@@ -56,40 +58,71 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setIsConnected(false);
     }
 
-    // Create socket connection
-    const newSocket: TypedSocket = io(apiUrl, {
-      auth: {
-        token: accessToken,
-      },
-      transports: ['websocket'],
-      autoConnect: true,
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
-    });
+    const gen = ++connectGenerationRef.current;
 
-    newSocket.on('connect', () => {
-      setIsConnected(true);
-      hasLoggedConnectErrorRef.current = false;
-    });
+    void (async () => {
+      const healthy = await waitForApiHealth(apiUrl);
+      if (gen !== connectGenerationRef.current) return;
 
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-    });
-
-    newSocket.on('connect_error', (error) => {
-      if (!hasLoggedConnectErrorRef.current) {
-        console.warn('[Socket.IO] Connection error:', error.message);
-        hasLoggedConnectErrorRef.current = true;
+      if (!healthy) {
+        if (!hasLoggedConnectErrorRef.current) {
+          console.warn(
+            '[Socket.IO] API not reachable (health check failed); live updates disabled until refresh.',
+          );
+          hasLoggedConnectErrorRef.current = true;
+        }
+        return;
       }
-      setIsConnected(false);
-    });
 
-    socketRef.current = newSocket;
-    setSocket(newSocket);
+      hasLoggedConnectErrorRef.current = false;
+
+      const newSocket: TypedSocket = io(apiUrl, {
+        auth: {
+          token: accessToken,
+        },
+        transports: ['websocket'],
+        autoConnect: true,
+        reconnection: true,
+        reconnectionDelay: SOCKET_RECONNECT_DELAY_MS,
+        reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX_MS,
+        reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
+        randomizationFactor: 0.5,
+      });
+
+      newSocket.on('connect', () => {
+        setIsConnected(true);
+        hasLoggedConnectErrorRef.current = false;
+      });
+
+      newSocket.on('disconnect', () => {
+        setIsConnected(false);
+      });
+
+      newSocket.on('connect_error', (error) => {
+        if (!hasLoggedConnectErrorRef.current) {
+          console.warn('[Socket.IO] Connection error:', error.message);
+          hasLoggedConnectErrorRef.current = true;
+        }
+        setIsConnected(false);
+      });
+
+      if (gen !== connectGenerationRef.current) {
+        newSocket.disconnect();
+        return;
+      }
+
+      socketRef.current = newSocket;
+      setSocket(newSocket);
+    })();
 
     return () => {
-      newSocket.disconnect();
+      connectGenerationRef.current += 1;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+        setSocket(null);
+        setIsConnected(false);
+      }
     };
   }, [accessToken]);
 
