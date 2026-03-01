@@ -862,6 +862,8 @@ PRE-COMPUTED on every download (O(1) reads):
   Domain breakdown → DomainStats collection
     Separate collection (not embedded array) — one doc per userId+domain
     Atomic $inc per domain — scales cleanly as domain count grows
+    Fields per domain: total, newCount, dupCount, newSize, dupSize, totalSize
+    Three size fields allow frontend to show new vs duplicate breakdown per domain
 
 ON-DEMAND aggregation (fast with indexes):
   Trend chart  → GROUP BY date on DownloadEvent (~5ms with indexes)

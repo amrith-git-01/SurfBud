@@ -167,7 +167,9 @@ Fields:
   total      number    default 0  (all downloads from this domain)
   newCount   number    default 0  (new files from this domain)
   dupCount   number    default 0  (duplicate downloads from this domain)
-  size       number    default 0  (bytes — total size from this domain)
+  newSize    number    default 0  (bytes — size of new files from this domain)
+  dupSize    number    default 0  (bytes — size of duplicate files from this domain)
+  totalSize  number    default 0  (bytes — newSize + dupSize, total from this domain)
   createdAt  Date      auto
   updatedAt  Date      auto
 
@@ -332,10 +334,12 @@ upsertOnDownload(
       { userId, domain },
       {
         $inc: {
-          total:    1,
-          newCount: status === 'new'       ? 1 : 0,
-          dupCount: status === 'duplicate' ? 1 : 0,
-          size:     size ?? 0,
+          total:     1,
+          newCount:  status === 'new'       ? 1 : 0,
+          dupCount:  status === 'duplicate' ? 1 : 0,
+          newSize:   status === 'new'       ? (size ?? 0) : 0,
+          dupSize:   status === 'duplicate' ? (size ?? 0) : 0,
+          totalSize: size ?? 0,
         }
       },
       { upsert: true }
