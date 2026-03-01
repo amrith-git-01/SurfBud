@@ -5,4 +5,4 @@ import { downloadRouter } from "./download.routes";
 export const rootRouter = Router();
 
 rootRouter.use("/auth", authRouter);
-rootRouter.use("/download", downloadRouter);
+rootRouter.use("/downloads", downloadRouter);
