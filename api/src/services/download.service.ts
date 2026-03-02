@@ -1,76 +1,85 @@
+import type { IDownloadEvent } from "../models/download-event.model";
+import type { IFile } from "../models/file.model";
 import { FileRepository } from "../repositories/file.repository";
-import {
-  DownloadEventRepository,
-  type DownloadStatus,
-} from "../repositories/download-event.repository";
+import { DownloadEventRepository } from "../repositories/download-event.repository";
+import { DownloadMetricsService } from "./download-metrics.service";
+import { NotFoundError } from "../utils/errors";
 import { inferFileCategory } from "../utils/file-utils";
 
-export interface RecordDownloadInput {
-  hash: string;
+export interface DownloadPayload {
+  hash: string | null;
   filename: string;
-  url?: string;
-  size?: number;
-  mimeType?: string;
-  sourceDomain?: string;
-  durationMs?: number;
-  isRemoved?: boolean;
-  removedAt?: Date;
+  url: string;
+  size: number;
+  mimeType: string;
+  fileExtension: string;
+  fileCategory: string;
+  sourceDomain: string;
+  duration: number;
+  savedPath?: string;
+}
+
+export interface ProcessResult {
+  event: IDownloadEvent;
+  file: IFile;
+  isDuplicate: boolean;
 }
 
 export const DownloadService = {
-  async recordDownload(
+  async processDownload(
     userId: string,
-    input: RecordDownloadInput,
-  ): Promise<{
-    status: DownloadStatus;
-    fileId: string;
-    downloadEventId: string;
-  }> {
-    // Derive extension + canonical category using your shared util
-    const { fileExtension, category } = inferFileCategory({
-      filename: input.filename,
-      mimeType: input.mimeType,
+    payload: DownloadPayload,
+  ): Promise<ProcessResult> {
+    const inferred = inferFileCategory({
+      filename: payload.filename,
+      mimeType: payload.mimeType,
     });
 
-    // 1) Look up existing File (dedupe by userId + hash)
-    let file = await FileRepository.findByUserAndHash(userId, input.hash);
-    let status: DownloadStatus;
+    const existingFile = payload.hash
+      ? await FileRepository.findByHash(userId, payload.hash)
+      : null;
+    const status = existingFile ? "duplicate" : "new";
 
-    if (!file) {
-      // First time we've seen this file for this user
-      file = await FileRepository.create({
+    let file: IFile;
+    if (!existingFile) {
+      file = (await FileRepository.create({
         userId,
-        hash: input.hash,
-        filename: input.filename,
-        url: input.url,
-        size: input.size,
-        fileExtension,
-        fileCategory: category,
-        mimeType: input.mimeType,
-        sourceDomain: input.sourceDomain,
-      });
-      status = "new";
+        hash: payload.hash ?? `no-hash-${Date.now()}`,
+        filename: payload.filename,
+        url: payload.url,
+        size: payload.size,
+        fileExtension: inferred.fileExtension,
+        fileCategory: inferred.category,
+        mimeType: payload.mimeType,
+        sourceDomain: payload.sourceDomain,
+      })) as IFile;
     } else {
-      // Already have this file for this user
-      status = "duplicate";
+      file = existingFile as IFile;
     }
 
-    // 2) Always create a DownloadEvent
-    const event = await DownloadEventRepository.createEvent({
+    const event = await DownloadEventRepository.create({
       userId,
       fileId: String(file._id),
-      filename: input.filename,
-      sourceDomain: input.sourceDomain,
+      filename: payload.filename,
+      sourceDomain: payload.sourceDomain,
       status,
-      duration: input.durationMs,
-      isRemoved: input.isRemoved,
-      removedAt: input.removedAt,
+      duration: payload.duration,
     });
 
+    await DownloadMetricsService.updateOnDownload(userId, file, status);
+
     return {
-      status,
-      fileId: String(file._id),
-      downloadEventId: String(event._id),
+      event,
+      file,
+      isDuplicate: status === "duplicate",
     };
+  },
+
+  async markRemoved(userId: string, eventId: string): Promise<IDownloadEvent> {
+    const event = await DownloadEventRepository.markRemoved(eventId, userId);
+    if (!event) {
+      throw new NotFoundError("Download event not found");
+    }
+    return event;
   },
 };
