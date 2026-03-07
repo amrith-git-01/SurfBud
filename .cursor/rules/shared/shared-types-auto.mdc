@@ -1,0 +1,169 @@
+---
+description: Shared type definitions and API contract rules across all three folders
+globs: ["**/types/shared/**/*.ts"]
+alwaysApply: false
+---
+
+# Shared Types — Contract Rules
+
+## The Rule
+
+Types in `src/types/shared/` are the **contract** between the three independent deployables. They must be identical across all three folders. Any change to a shared type must be made in all three in a single commit.
+
+```
+api/src/types/shared/          ← authoritative source
+dashboard/src/types/shared/    ← identical copy
+extension/src/types/shared/    ← identical copy
+```
+
+## Core Shared Type Files
+
+```
+mode.types.ts         → ModeType, Mode, ModeSession, ModeSessionStatus
+download.types.ts     → Download, DownloadStatus, DownloadHealth
+metrics.types.ts      → UserMetrics, ModeTimeEntry, DailyActivity, StreakData
+user.types.ts         → User (public shape only — no password, no tokens)
+tab.types.ts          → TabEvent, BrowsingSession
+ai.types.ts           → AIInsight, InsightType, NudgeType
+websocket.types.ts    → all WebSocket event payload shapes
+```
+
+## Type Definitions
+
+```typescript
+// mode.types.ts
+export enum ModeType {
+  DEV       = 'dev',
+  CHILL     = 'chill',
+  DEEP_WORK = 'deep_work',
+  STUDY     = 'study',
+  CUSTOM    = 'custom',
+}
+
+export interface Mode {
+  id:                 string
+  userId:             string
+  name:               string
+  type:               ModeType
+  color:              string          // hex #RRGGBB
+  pinnedTabs:         string[]        // URLs
+  blockedDomains:     string[]
+  focusTimerMinutes:  number | null
+  isActive:           boolean
+  createdAt:          string          // ISO string — not Date (JSON-safe)
+  updatedAt:          string
+}
+
+export interface ModeSession {
+  id:          string
+  userId:      string
+  modeId:      string
+  modeName:    string
+  modeColor:   string
+  startedAt:   string                 // ISO string
+  endedAt:     string | null          // null = currently active
+  durationMs:  number | null          // null = currently active
+  focusScore:  number | null          // 0–100, null if not yet calculated
+}
+
+// metrics.types.ts
+export interface UserMetrics {
+  userId:         string
+  updatedAt:      string
+  streak: {
+    current:      number
+    longest:      number
+    lastActiveDate: string
+  }
+  today: {
+    downloads:    number
+    newFiles:     number
+    duplicates:   number
+    focusScore:   number | null
+    activeMinutes: number
+  }
+  week: {
+    downloads:    number
+    newFiles:     number
+    duplicates:   number
+    topMode:      string | null
+    peakHour:     number | null       // 0–23
+    peakDay:      string | null       // 'Mon'–'Sun'
+  }
+  modeTime:       ModeTimeEntry[]
+}
+
+export interface ModeTimeEntry {
+  modeId:         string
+  modeName:       string
+  modeColor:      string
+  totalMinutes:   number
+  percentage:     number
+}
+
+// websocket.types.ts — all WS event shapes
+export interface WsMetricsDelta {
+  type:       'metrics:updated'
+  userId:     string
+  delta: Partial<UserMetrics['today']>
+}
+
+export interface WsDownloadNew {
+  type:       'download:new'
+  userId:     string
+  download:   Download
+}
+
+export interface WsInsightNew {
+  type:       'insight:new'
+  userId:     string
+  insight:    AIInsight
+}
+
+export type WsEvent = WsMetricsDelta | WsDownloadNew | WsInsightNew
+```
+
+## API Response Envelope
+
+```typescript
+// All API responses use this envelope — defined in shared types
+export interface ApiSuccess<T> {
+  success: true
+  data:    T
+}
+
+export interface ApiError {
+  success: false
+  error: {
+    code:    string
+    message: string
+    issues?: unknown[]    // Zod validation issues
+  }
+}
+
+export type ApiResponse<T> = ApiSuccess<T> | ApiError
+```
+
+## No Database Types in Shared
+
+```typescript
+// ✅ Shared types are plain data shapes — no Mongoose, no ObjectId
+export interface User {
+  id:    string      // string — not mongoose.Types.ObjectId
+  email: string
+}
+
+// ❌ Never leak Mongoose types into shared
+import { Document } from 'mongoose'
+export interface User extends Document { }  // WRONG — extension/dashboard don't have mongoose
+```
+
+## Dates as ISO Strings
+
+```typescript
+// ✅ All dates in shared types are ISO strings — JSON-safe, works in all three contexts
+createdAt: string    // "2026-03-05T14:30:00.000Z"
+
+// ❌ Never use Date objects in shared types — they don't survive JSON serialization
+createdAt: Date      // becomes string in JSON anyway — be explicit
+```

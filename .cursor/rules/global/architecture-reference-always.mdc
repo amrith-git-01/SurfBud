@@ -1,0 +1,35 @@
+---
+description: SurfBud architecture decisions — principles and layer rules only. Full doc at docs/ARCHITECTURE.md
+alwaysApply: true
+---
+
+# SurfBud — Architecture Decisions
+
+## Repo
+One GitHub repo, three independent folders: `api/` `dashboard/` `extension/` — each deploys independently via path-filtered CI. No shared build-time code. Runtime communication only via HTTPS REST + WebSocket.
+
+## Layer Rule — Non-Negotiable
+```
+Route → Controller → Service → Repository → Model
+
+Controller   imports Services only
+Service      imports Repositories + other Services
+Repository   imports Models only
+```
+Never import a Model in a Controller. Never write DB queries in a Service. No exceptions.
+
+## Three Critical Patterns
+```
+1. AI is always async       → BullMQ queue, never inline in request handler
+2. Metrics are pre-computed → read UserMetrics document, never aggregate on demand
+3. WebSocket sends deltas   → never full dataset, user-specific rooms only
+```
+
+## Auth
+Access token 15min (Authorization header) + refresh token 7d (httpOnly cookie + Redis). No `plan` claim in JWT — no tiers in Phase 1.
+
+## Phase 1
+No Free/Pro tiers. No feature gating. Full product for all users. Monetization is Phase 3.
+
+## Shared Types
+`src/types/shared/` is duplicated across all three folders. Any change must update all three in one commit.

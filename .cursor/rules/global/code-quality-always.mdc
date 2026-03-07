@@ -1,0 +1,204 @@
+---
+description: Code quality, DRY, error handling, and general best practices for all folders
+alwaysApply: true
+---
+
+# Code Quality Rules
+
+## Early Returns — Guard Clauses First
+
+```typescript
+// ✅ Validate/guard at the top, happy path at the bottom
+async function processDownload(userId: string, downloadId: string) {
+  if (!userId)     throw new ValidationError('userId required')
+  if (!downloadId) throw new ValidationError('downloadId required')
+
+  const user = await UserRepository.findById(userId)
+  if (!user)     throw new NotFoundError('User not found')
+  if (!user.isActive) throw new ForbiddenError('Account inactive')
+
+  // happy path — no deep nesting
+  const download = await DownloadRepository.create({ userId, downloadId })
+  return download
+}
+
+// ❌ Deeply nested — hard to read
+async function processDownload(userId: string, downloadId: string) {
+  if (userId) {
+    if (downloadId) {
+      const user = await UserRepository.findById(userId)
+      if (user) {
+        if (user.isActive) {
+          return await DownloadRepository.create({ userId, downloadId })
+        }
+      }
+    }
+  }
+}
+```
+
+## DRY — Don't Repeat Yourself
+
+```typescript
+// ✅ Extract repeated patterns into utilities
+// If the same logic appears in 2+ places, extract it
+
+// ✅ Shared validation schemas — define once, import everywhere
+export const PaginationSchema = z.object({
+  page:  z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+})
+
+// ✅ Shared response helpers
+export const ok  = <T>(res: Response, data: T, status = 200) =>
+  res.status(status).json({ success: true, data })
+
+export const err = (res: Response, code: string, message: string, status = 400) =>
+  res.status(status).json({ success: false, error: { code, message } })
+```
+
+## Variable Naming — Auxiliary Verbs
+
+```typescript
+// ✅ Boolean variables use is/has/can/should prefix
+const isLoading   = true
+const hasError    = false
+const canEdit     = user.role === 'admin'
+const isStreakActive = streak.current > 0
+
+// ✅ Async operations — use past tense or clear verb forms
+const fetchedUser  = await UserRepository.findById(id)
+const createdMode  = await ModeService.create(data)
+
+// ✅ Arrays/collections — plural nouns
+const sessions:  ModeSession[]  = []
+const downloads: Download[]     = []
+const insights:  AIInsight[]    = []
+```
+
+## No Magic Values
+
+```typescript
+// ❌ Magic numbers and strings
+setTimeout(fn, 900000)
+if (streak > 7) { }
+jwt.sign(payload, secret, { expiresIn: '900s' })
+
+// ✅ Named constants
+const METRICS_CACHE_TTL_MS    = 15 * 60 * 1000    // 15 minutes
+const STREAK_MILESTONE_DAYS   = [7, 14, 30, 60, 100]
+const JWT_ACCESS_TTL          = '15m'
+
+setTimeout(fn, METRICS_CACHE_TTL_MS)
+if (STREAK_MILESTONE_DAYS.includes(streak)) { }
+jwt.sign(payload, secret, { expiresIn: JWT_ACCESS_TTL })
+```
+
+## Const by Default
+
+```typescript
+// ✅ const unless reassignment is necessary
+const userId = req.user.id
+const sessions = await SessionRepository.findByUserId(userId)
+
+// ✅ let only when reassigning
+let retries = 0
+while (retries < 3) {
+  retries++
+}
+
+// ❌ Never var
+var userId = req.user.id
+```
+
+## No Console Logs in Production Code
+
+```typescript
+// ❌ Never leave console.log in committed code
+console.log('user:', user)
+
+// ✅ Use structured logger
+import { logger } from '../utils/logger'
+logger.info('User session started', { userId, modeId })
+logger.error('AI router failed', { error: err.message, model })
+logger.warn('Rate limit approaching', { userId, count })
+
+// ✅ Logger wraps a library (pino recommended) — structured JSON output
+// api/src/utils/logger.ts
+import pino from 'pino'
+export const logger = pino({ level: env.NODE_ENV === 'production' ? 'info' : 'debug' })
+```
+
+## Never Swallow Errors
+
+```typescript
+// ❌ Silent catch — error disappears
+try {
+  await AIQueue.add('generate-insight', data)
+} catch (err) {
+  // do nothing
+}
+
+// ✅ Always log or re-throw
+try {
+  await AIQueue.add('generate-insight', data)
+} catch (err) {
+  logger.error('Failed to queue AI job', { error: (err as Error).message, data })
+  // re-throw if the caller needs to know
+  throw err
+}
+```
+
+## File Length — Single Responsibility
+
+```
+If a file exceeds ~200 lines, it probably has more than one responsibility.
+Split it. Each file should do one thing.
+
+controller file    → route handlers only (no business logic)
+service file       → one domain's business logic
+repository file    → one model's DB operations
+hook file          → one piece of React state logic
+component file     → one UI component
+```
+
+## Comments — Why, Not What
+
+```typescript
+// ❌ Comments that describe what the code does (the code already says this)
+// Increment counter
+count++
+
+// ❌ Commented-out code — delete it, git has history
+// const oldLogic = await OldService.do()
+
+// ✅ Comments that explain WHY — context the code can't express
+// Redis TTL is 30s not 15s here because the metrics endpoint is called
+// on every WebSocket reconnect and we need to absorb reconnect storms
+await redis.setex(key, 30, JSON.stringify(metrics))
+
+// ✅ TODO comments must include a ticket reference or date
+// TODO(2026-03-15): Replace with native groupBy when Node 22 is stable
+```
+
+## Immutability — Prefer Immutable Patterns
+
+```typescript
+// ✅ Spread instead of mutate
+const updatedMode = { ...mode, isActive: true, updatedAt: new Date().toISOString() }
+
+// ✅ Map/filter/reduce instead of push/splice
+const activeSessions = sessions.filter(s => !s.endedAt)
+const sessionIds = sessions.map(s => s.id)
+
+// ❌ Mutating function parameters
+function normalise(user: User) {
+  user.email = user.email.toLowerCase()  // mutates the input object
+  return user
+}
+
+// ✅ Return new object
+function normalise(user: User): User {
+  return { ...user, email: user.email.toLowerCase() }
+}
+```

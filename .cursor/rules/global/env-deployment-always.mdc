@@ -1,0 +1,105 @@
+---
+description: Environment variables, deployment targets, and CI/CD rules
+alwaysApply: false
+globs: ["**/.env*", "**/config/**", "**/*.yml", "**/vite.config*", "**/tsconfig*"]
+---
+
+# Environment & Deployment Rules
+
+## Environment Files — Never Committed
+
+```
+api/.env              → never committed (in .gitignore)
+api/.env.example      → committed — all keys present, values empty or fake
+
+dashboard/.env.local  → never committed
+dashboard/.env.example → committed
+
+extension/.env        → never committed
+extension/.env.example → committed
+```
+
+## api/.env Variables
+
+```bash
+NODE_ENV=development
+PORT=3001
+
+# Database
+MONGODB_URI=mongodb://localhost:27017/surfbud
+REDIS_URL=redis://localhost:6379
+
+# Auth
+JWT_SECRET=             # min 32 chars, generate with: openssl rand -hex 32
+REFRESH_TOKEN_SECRET=   # separate secret for refresh tokens
+
+# AI
+GROQ_API_KEY=           # starts with gsk_
+
+# CORS origins
+DASHBOARD_ORIGIN=http://localhost:5173
+EXTENSION_ORIGIN=chrome-extension://YOUR_EXTENSION_ID
+
+# Optional
+LOG_LEVEL=debug
+```
+
+## dashboard/.env.local Variables
+
+```bash
+VITE_API_URL=http://localhost:3001
+VITE_WS_URL=ws://localhost:3001
+```
+
+## Deployment Targets
+
+```
+api/        → Railway or Render (Node.js server)
+             Build: npm run build
+             Start: npm start
+             Root directory: api/
+
+dashboard/  → Vercel or Netlify (static SPA)
+             Build: npm run build
+             Output: dist/
+             Root directory: dashboard/
+
+extension/  → Chrome Web Store
+             Build: npm run build:ext
+             Output: dist/ (zip for submission)
+             Root directory: extension/
+```
+
+## Path-Filtered CI — GitHub Actions
+
+Each deployment is triggered ONLY by changes to its folder:
+
+```yaml
+# .github/workflows/deploy-api.yml
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - '.github/workflows/deploy-api.yml'
+
+# .github/workflows/deploy-dashboard.yml
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dashboard/**'
+      - '.github/workflows/deploy-dashboard.yml'
+```
+
+Changes to `dashboard/**` NEVER trigger the api pipeline. Changes to `api/**` NEVER trigger dashboard or extension pipelines.
+
+## Production Checklist
+
+Before any production deploy:
+- [ ] All environment variables validated by Zod at startup (api)
+- [ ] No `console.log` in committed code
+- [ ] No hardcoded secrets anywhere
+- [ ] `NODE_ENV=production` set in deployment environment
+- [ ] CORS origins updated to production URLs (not localhost)
+- [ ] JWT secrets rotated from development values

@@ -1,0 +1,335 @@
+---
+description: React component rules for the dashboard/ folder
+globs: ["dashboard/src/**/*.tsx", "dashboard/src/**/*.ts"]
+alwaysApply: false
+---
+
+# Dashboard — React Component Rules
+
+## Component Structure
+
+```typescript
+// ✅ Correct structure — always in this order
+// 1. Imports (external → internal → types)
+// 2. Types / interfaces
+// 3. Component function
+// 4. Sub-components (if small and tightly coupled)
+// 5. Helper functions specific to this component
+
+import { useState, useCallback, useMemo } from 'react'
+import { ResponsiveContainer, LineChart } from 'recharts'
+
+import { MetricCard } from '@/components/ui/MetricCard'
+import { useMetrics } from '@/hooks/useMetrics'
+
+import type { UserMetrics } from '@/types/shared/metrics.types'
+
+// ✅ Props interface named [ComponentName]Props
+interface MetricGridProps {
+  userId: string
+  period: 'today' | 'week' | 'month'
+}
+
+// ✅ Named export — never default export
+export function MetricGrid({ userId, period }: MetricGridProps) {
+  // hooks first
+  const { data, isLoading } = useMetrics(userId, period)
+
+  // derived state with useMemo
+  const weeklyTotal = useMemo(() =>
+    data?.downloads.reduce((sum, d) => sum + d.count, 0) ?? 0,
+    [data]
+  )
+
+  // event handlers named handle*
+  const handlePeriodChange = useCallback((newPeriod: string) => {
+    // ...
+  }, [])
+
+  // early return for loading/error
+  if (isLoading) return <MetricGridSkeleton />
+  if (!data) return null
+
+  // happy path last
+  return (
+    <div className="grid grid-cols-4 gap-4">
+      {/* ... */}
+    </div>
+  )
+}
+```
+
+## Rules
+
+**Named exports always — never default exports**
+```typescript
+// ✅
+export function MetricCard() { }
+export { MetricCard }
+
+// ❌
+export default MetricCard
+```
+
+**Functional components only — no class components ever**
+
+**One component per file** — unless the sub-component is tiny (<20 lines) and only used by the parent
+
+**Props destructured in signature** — never `props.something` inside the body
+
+**Boolean props use is/has/can prefix**
+```typescript
+interface CardProps {
+  isLoading: boolean
+  hasError: boolean
+  canEdit: boolean
+}
+```
+
+**Event handlers use handle prefix**
+```typescript
+const handleClick = () => {}
+const handleKeyDown = () => {}
+const handleModeSwitch = () => {}
+```
+
+## Hooks
+
+**Custom hooks always start with `use`**
+```typescript
+export function useCountUp(target: number, duration = 800): number { }
+export function useMetrics(userId: string): UseMetricsReturn { }
+export function useModeSession(): UseModeSessionReturn { }
+```
+
+**One hook per concern** — don't build one giant useEverything hook
+
+**Always return typed objects from hooks**
+```typescript
+interface UseMetricsReturn {
+  data: UserMetrics | undefined
+  isLoading: boolean
+  isError: boolean
+  refetch: () => void
+}
+```
+
+## Performance
+
+```typescript
+// ✅ Memoize expensive derivations
+const chartData = useMemo(() =>
+  sessions.map(s => ({ x: s.date, y: s.focusScore })),
+  [sessions]
+)
+
+// ✅ Memoize callbacks passed to children
+const handleModeChange = useCallback((modeId: string) => {
+  setActiveMode(modeId)
+}, [])
+
+// ✅ Lazy load heavy routes
+const ReportsPage = lazy(() => import('./pages/ReportsPage'))
+
+// ✅ Wrap chart-heavy pages in Suspense
+<Suspense fallback={<PageSkeleton />}>
+  <ReportsPage />
+</Suspense>
+```
+
+## Folder Structure
+
+```
+dashboard/src/
+├── components/
+│   ├── ui/           ← pure presentational components (MetricCard, Badge, Button)
+│   ├── charts/       ← all Recharts wrappers (LineChart, BarChart, etc.)
+│   ├── layout/       ← Nav, Sidebar, PageShell
+│   └── features/     ← feature-specific composites (ModePanel, StreakCard)
+├── pages/            ← one file per route
+├── hooks/            ← all custom hooks
+├── store/            ← Zustand stores
+├── api/              ← React Query hooks (useQuery, useMutation wrappers)
+├── types/
+│   └── shared/       ← identical to api/src/types/shared/ and ext/src/types/shared/
+└── utils/            ← pure utility functions
+```
+
+## Tailwind — Required Patterns
+
+```tsx
+// ✅ Tailwind only — no inline styles, no CSS modules, no styled-components
+<div className="rounded-2xl p-6 bg-white/80 backdrop-blur-[20px] shadow-glass">
+
+// ❌ Never inline styles (except dynamic values that Tailwind can't express)
+<div style={{ borderRadius: '12px', padding: '24px' }}>
+
+// ✅ Dynamic values that require inline styles (rare, acceptable)
+<div
+  className="absolute bottom-0 h-0.5 bg-teal-600"
+  style={{ left: indicator.left, width: indicator.width }}  // sliding nav indicator
+/>
+
+// ✅ clsx/cn for conditional classes
+import { cn } from '@/utils/cn'
+<div className={cn('card-metric-glass', isActive && 'border-teal-400')} />
+```
+
+## Reusability
+
+### Component Hierarchy — Build Bottom Up
+
+```
+ui/          ← primitive, zero business logic, works anywhere
+charts/      ← Recharts wrappers, data-agnostic where possible
+features/    ← composes ui/ + charts/ + hooks, knows about domain
+pages/       ← composes features/, owns layout, connects to router
+```
+
+Never let a `ui/` component import from `features/`. Never let a `features/` component import from `pages/`. Dependency only flows upward.
+
+### ui/ Primitives — The Reuse Foundation
+
+Every repeated visual pattern gets extracted into `components/ui/`. If you write the same structure twice, it becomes a component.
+
+```tsx
+// ✅ components/ui/MetricCard.tsx — reusable, no business logic
+interface MetricCardProps {
+  label: string
+  value: number | string
+  delta?: { value: number; label: string }
+  isLoading?: boolean
+  className?: string        // always accept className for extension
+}
+
+export function MetricCard({ label, value, delta, isLoading, className }: MetricCardProps) {
+  if (isLoading) return <MetricCardSkeleton />
+  return (
+    <div className={cn('card-metric-glass', className)}>
+      <p className="section-label">{label}</p>
+      <p className="metric-hero tabular-nums" style={{ minWidth: '4ch' }}>{value}</p>
+      {delta && <Delta value={delta.value} label={delta.label} />}
+    </div>
+  )
+}
+
+// ✅ Used anywhere — no coupling to a specific page or data source
+<MetricCard label="THIS WEEK"  value={weeklyCount}  delta={{ value: -16, label: 'vs last week' }} />
+<MetricCard label="THIS MONTH" value={monthlyCount} delta={{ value: +42, label: 'vs last month' }} />
+```
+
+### Composition Over Configuration
+
+```tsx
+// ❌ One mega-component controlled by a type prop
+<Card type="metric" />
+<Card type="chart" />
+<Card type="insight" />
+
+// ✅ Separate focused components that share a base
+<MetricCard />     // metric-specific layout
+<ChartCard />      // chart-specific layout  
+<InsightCard />    // insight-specific layout
+// All three use the same .card-metric-glass or .chart-glass underneath
+```
+
+### children and Slots for Flexible Layouts
+
+```tsx
+// ✅ Use children to keep layout components flexible
+interface PageShellProps {
+  title: string
+  actions?: React.ReactNode    // slot for page-level action buttons
+  children: React.ReactNode
+}
+
+export function PageShell({ title, actions, children }: PageShellProps) {
+  return (
+    <main className="p-8">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="font-display text-xl font-bold">{title}</h1>
+        {actions}
+      </div>
+      {children}
+    </main>
+  )
+}
+
+// Usage — actions slot filled by the page, not baked into PageShell
+<PageShell title="Downloads" actions={<ExportButton />}>
+  <DownloadTable />
+</PageShell>
+```
+
+### Always Accept className
+
+Every `ui/` component must accept and forward `className` for one-off overrides without needing a new prop:
+
+```tsx
+// ✅ Every ui/ component
+interface BadgeProps {
+  label: string
+  variant: 'success' | 'warning' | 'danger' | 'info'
+  className?: string
+}
+
+export function Badge({ label, variant, className }: BadgeProps) {
+  return (
+    <span className={cn(badgeVariants[variant], className)}>
+      {label}
+    </span>
+  )
+}
+```
+
+### Skeleton Components — One Per UI Component
+
+Every `ui/` component that displays async data needs a matching skeleton:
+
+```tsx
+// ✅ Co-located in the same file
+export function MetricCard({ ... }: MetricCardProps) { ... }
+
+export function MetricCardSkeleton() {
+  return (
+    <div className="card-metric-glass">
+      <div className="skeleton h-3 w-16 mb-3" />
+      <div className="skeleton h-10 w-12 mb-2" />
+      <div className="skeleton h-3 w-20" />
+    </div>
+  )
+}
+```
+
+### Don't Repeat — Extract Immediately
+
+```tsx
+// ❌ Same delta pattern copy-pasted in three cards
+<span className="text-sm font-medium text-green-600">↑ 12 vs last week</span>
+<span className="text-sm font-medium text-red-600">↓ 4 vs last week</span>
+
+// ✅ Extract once into ui/Delta.tsx — import everywhere
+export function Delta({ value, label }: { value: number; label: string }) {
+  const isPositive = value >= 0
+  return (
+    <span className={cn('text-sm font-medium', isPositive ? 'text-green-600' : 'text-red-600')}>
+      {isPositive ? '↑' : '↓'} {Math.abs(value)} {label}
+    </span>
+  )
+}
+```
+
+## Accessibility
+
+```tsx
+// ✅ Always provide aria labels on icon-only buttons
+<button aria-label="Close panel">
+  <XIcon />
+</button>
+
+// ✅ Use semantic HTML
+<nav>, <main>, <section>, <article>, <header>, <footer>
+
+// ✅ Keyboard navigation — all interactive elements must work with keyboard
+// ✅ Focus ring — provided globally via *:focus-visible in global CSS
+```
