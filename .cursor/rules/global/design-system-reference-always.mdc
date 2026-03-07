@@ -1,0 +1,76 @@
+---
+description: SurfBud design tokens and visual rules. Full doc at docs/DESIGN_SYSTEM.md
+alwaysApply: false
+globs: ["dashboard/src/**/*.tsx", "dashboard/src/**/*.css", "extension/src/sidepanel/**/*.tsx", "extension/src/popup/**/*.tsx"]
+---
+
+# SurfBud — Design System (Quick Reference)
+
+## Brand
+Primary: Ocean Teal `#0891B2` · Background: Ice White `#F0F9FF` · Cards: `#FFFFFF` · Light theme only.
+
+## Core Color Tokens
+```
+--color-primary:        #0891B2   buttons, links, active nav
+--color-primary-700:    #0E7490   hover
+--color-bg-page:        #F0F9FF   page background (NOT pure white)
+--color-bg-card:        #FFFFFF   cards
+--color-text-heading:   #0F172A   metric numbers, titles
+--color-text-body:      #334155   body text
+--color-text-muted:     #94A3B8   labels, timestamps
+--color-success:        #16A34A   positive delta, streak active
+--color-danger:         #DC2626   negative delta, errors
+--color-warning:        #D97706   caution states
+--color-mode-dev:       #7C3AED   --color-mode-chill: #E11D48
+--color-mode-deepwork:  #0891B2   --color-mode-study: #059669
+```
+Never hardcode hex values. Always use CSS tokens or Tailwind mapped classes.
+
+## Typography Rules
+```
+Display (titles, card headings)  → font-display (Plus Jakarta Sans) 600/700
+UI (all interface text)          → font-sans (Inter) 400/500/600/700
+Numbers (ALL metrics)            → font-sans + tabular-nums + lining-nums — ALWAYS
+Filenames/paths                  → font-mono (JetBrains Mono) 400
+```
+`tabular-nums` on every number. `min-width: 4ch` on every animated metric container.
+
+## Glass Effects
+Applied ONLY to: metric cards · chart containers · AI insight cards.
+NEVER on: nav · tooltips · modals · side panel shell · toasts · buttons.
+```css
+.card-metric-glass  → bg white/80 · blur(20px) · teal border · shadow-glass
+.chart-glass        → bg white/65 · blur(12px) · teal border · shadow-glass
+/* hover: translateY(-3px) + shadow-glass-hover */
+/* fallback: @supports not (backdrop-filter) → solid white card */
+```
+
+## Animation Rules
+```
+✅ Safe (GPU):    transform · opacity · box-shadow · color · background-color
+❌ Never animate: width · height · margin · padding · top · left (causes layout shift)
+
+ease-spring → ONLY for streak milestones and mode switches
+All other transitions → ease-out at 150–300ms
+```
+
+## Shadows — Always Teal-Tinted
+```
+shadow-sm      resting cards
+shadow-md      hovered cards
+shadow-glass   glass metric cards and chart containers
+shadow-primary primary buttons only
+```
+Never use Tailwind's default grey shadows.
+
+## Recharts — Always
+```
+Wrap in .chart-glass · Use shared CHART_COLORS/CHART_AXIS_STYLE/CHART_TOOLTIP_STYLE
+ResponsiveContainer always · never fixed pixel width
+Line: dot=false, animationDuration=800
+Bar: radius={[4,4,0,0]}
+Area: fillOpacity={0.12}
+```
+
+## Spacing
+8px base grid. `gap` between cards always, never `margin`.

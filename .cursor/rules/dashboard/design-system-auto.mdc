@@ -1,0 +1,178 @@
+---
+description: Design system enforcement — colors, typography, glass effects, animations, Recharts
+globs: ["dashboard/src/**/*.tsx", "dashboard/src/**/*.css"]
+alwaysApply: false
+---
+
+# Dashboard — Design System Rules
+
+Reference document: `docs/DESIGN_SYSTEM.md`
+
+## Color — CSS Variables Only
+
+```tsx
+// ✅ Always reference design tokens — never hardcode hex values
+<div style={{ color: 'var(--color-text-heading)' }} />
+<div className="text-teal-600" />      // Tailwind mapped to #0891B2
+
+// ❌ Never hardcode colors
+<div style={{ color: '#0F172A' }} />
+<div style={{ background: '#0891B2' }} />
+```
+
+## Typography — Strict Rules
+
+```tsx
+// ✅ Section labels — Inter 500, 12px, uppercase, tracking-widest
+<p className="font-sans text-xs font-medium uppercase tracking-widest text-slate-400">
+  THIS WEEK
+</p>
+
+// ✅ Hero metric numbers — Inter 700, 48px, tabular-nums, -0.025em tracking
+<p className="font-sans text-5xl font-bold tabular-nums text-slate-950 leading-tight"
+   style={{ letterSpacing: '-0.025em', minWidth: '4ch' }}>
+  {count}
+</p>
+
+// ✅ Card headings — Plus Jakarta Sans 600, 16px
+<h3 className="font-display text-md font-semibold text-slate-800 leading-snug">
+  Downloads Overview
+</h3>
+
+// ✅ Filenames and paths — JetBrains Mono 400
+<span className="font-mono text-sm text-slate-700">
+  resume_v3.pdf
+</span>
+
+// Rule: tabular-nums on EVERY number in the product without exception
+// In Tailwind: className="tabular-nums"
+```
+
+## Glass Effects — Metric Cards & Charts
+
+```tsx
+// ✅ Metric card — use .card-metric-glass CSS class
+<div className="card-metric-glass">
+  {/* content */}
+</div>
+
+// ✅ Chart container — use .chart-glass CSS class
+<div className="chart-glass">
+  <p className="section-label">DOWNLOADS THIS WEEK</p>
+  <ResponsiveContainer width="100%" height={200}>
+    {/* Recharts component */}
+  </ResponsiveContainer>
+</div>
+
+// ✅ Tailwind equivalent for metric card
+<div className="bg-white/80 backdrop-blur-[20px] border border-white/50 border-t-white/80 border-l-white/80 rounded-xl p-4 shadow-glass hover:-translate-y-[3px] hover:shadow-glass-hover transition-[transform,box-shadow] duration-200 ease-out will-change-[transform,box-shadow]">
+
+// ❌ Never apply glass to: nav, buttons, tooltips, modals, toasts, side panel shell
+```
+
+## Animations — Non-Negotiable Rules
+
+```tsx
+// ✅ ONLY animate transform and opacity — these are GPU-composited, zero layout impact
+// transition-[transform,box-shadow,opacity,border-color] is safe
+
+// ❌ NEVER animate width, height, margin, padding, top, left, right, bottom
+// These trigger layout recalculation and WILL displace surrounding content
+
+// ✅ Card hover — transform + box-shadow only
+// Applied via .card-metric-glass and .chart-glass CSS classes automatically
+
+// ✅ Skeleton shimmer — teal-tinted
+<div className="skeleton" />   // via global CSS
+
+// ✅ Count-up for all hero metrics
+const count = useCountUp(metrics.weeklyDownloads, 800)
+// ALWAYS pair with tabular-nums + minWidth: '4ch' to prevent layout shift
+
+// ✅ Page transitions — opacity + translateY(8px) only
+// Applied via CSS Transition Group or Framer Motion with transform/opacity only
+
+// ✅ Milestone celebration (streak) — ease-spring, used ONLY for milestones
+// Everything else uses ease-out
+
+// Timing reference:
+// Hover lift:        200ms ease-out
+// Nav indicator:     250ms ease-smooth
+// Page enter:        200ms ease-enter
+// Page exit:         150ms ease-exit
+// Toast:             300ms ease-spring
+// Count-up:          800ms ease-out
+// Streak milestone:  600ms ease-spring
+```
+
+## Recharts — Required Configuration
+
+```tsx
+import { CHART_COLORS, CHART_AXIS_STYLE, CHART_GRID_STYLE, CHART_TOOLTIP_STYLE }
+  from '@/utils/chart-config'
+
+// ✅ Always use shared config constants — never configure inline per chart
+<CartesianGrid {...CHART_GRID_STYLE} vertical={false} />
+<XAxis {...CHART_AXIS_STYLE} tickLine={false} axisLine={false} />
+<Tooltip {...CHART_TOOLTIP_STYLE} />
+
+// ✅ All chart lines use animationDuration={800} animationEasing="ease-out"
+// ✅ All bars use radius={[4, 4, 0, 0]} (rounded top corners)
+// ✅ All area charts use fillOpacity={0.12} with teal gradient fill
+// ✅ Wrap every chart in .chart-glass container
+
+// ✅ Recharts always inside ResponsiveContainer
+<ResponsiveContainer width="100%" height={200}>
+  <LineChart data={data}>
+    {/* ... */}
+  </LineChart>
+</ResponsiveContainer>
+
+// ❌ Never set fixed pixel width on charts
+<LineChart width={400} height={200} />
+```
+
+## Shadows — Always Teal-Tinted
+
+```tsx
+// ✅ Use shadow tokens — never custom shadow values
+className="shadow-sm"            // resting cards (maps to --shadow-sm)
+className="shadow-md"            // hovered cards
+className="shadow-glass"         // glass metric cards and charts
+className="shadow-glass-hover"   // hovered glass elements
+className="shadow-primary"       // primary buttons only
+
+// ❌ Never use Tailwind's default grey shadows
+className="shadow"
+className="shadow-lg"            // Tailwind default — grey, not teal-tinted
+```
+
+## Spacing — 8px Grid
+
+```tsx
+// ✅ All spacing values must be multiples of 8px
+// p-1=4px  p-2=8px  p-3=12px  p-4=16px  p-6=24px  p-8=32px  p-12=48px  p-16=64px
+
+// ✅ Always use gap between cards — never margin
+<div className="grid grid-cols-4 gap-4">     // gap-4 = 16px ✅
+  <MetricCard />
+</div>
+
+// ❌ Never use margin between sibling cards
+<MetricCard className="mr-4" />              // gap instead
+```
+
+## Loading States — Skeleton Always, Spinner Never
+
+```tsx
+// ✅ Skeleton screens for data loading — matches the layout of content
+if (isLoading) return <MetricCardSkeleton />
+
+// ❌ Never a spinning indicator for page or card loads
+if (isLoading) return <Spinner />
+
+// ✅ Inline spinner ONLY for button loading state (< 1 second operations)
+<button disabled={isPending}>
+  {isPending ? <SpinnerIcon className="animate-spin" /> : 'Save'}
+</button>
+```

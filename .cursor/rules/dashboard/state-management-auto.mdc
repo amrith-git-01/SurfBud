@@ -1,0 +1,155 @@
+---
+description: State management rules — Zustand (client state) + React Query (server state)
+globs: ["dashboard/src/**/*.tsx", "dashboard/src/**/*.ts"]
+alwaysApply: false
+---
+
+# Dashboard — State Management Rules
+
+## The Golden Rule
+
+```
+Server state  → React Query (useQuery, useMutation, useInfiniteQuery)
+Client state  → Zustand (UI state, active mode, side panel open/closed)
+Form state    → local useState (never put form state in global store)
+Derived state → useMemo inside component (never store derived values)
+```
+
+Never put server data in Zustand. Never fetch data with useState + useEffect. These two rules eliminate 90% of state bugs.
+
+## React Query — Server State
+
+```typescript
+// ✅ Always define query keys as constants — never inline strings
+export const QUERY_KEYS = {
+  metrics:     (userId: string, period: string) => ['metrics', userId, period] as const,
+  sessions:    (userId: string)                 => ['sessions', userId]        as const,
+  modeList:    (userId: string)                 => ['modes', userId]           as const,
+  downloads:   (userId: string, page: number)   => ['downloads', userId, page] as const,
+} as const
+
+// ✅ Wrap React Query hooks in custom hooks — never call useQuery in a component directly
+export function useMetrics(userId: string, period: string) {
+  return useQuery({
+    queryKey: QUERY_KEYS.metrics(userId, period),
+    queryFn: () => MetricsAPI.get(userId, period),
+    staleTime: 30_000,            // 30 seconds — metrics don't change every second
+    gcTime:    5 * 60_000,        // 5 minutes cache
+  })
+}
+
+// ✅ Mutations always invalidate relevant queries on success
+export function useStartModeSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ModeAPI.startSession,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['metrics'] })
+    },
+  })
+}
+
+// ✅ Optimistic updates for instant UI feedback
+export function useToggleMode() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ModeAPI.toggle,
+    onMutate: async (modeId) => {
+      await queryClient.cancelQueries({ queryKey: ['modes'] })
+      const previous = queryClient.getQueryData(['modes'])
+      queryClient.setQueryData(['modes'], (old: Mode[]) =>
+        old.map(m => ({ ...m, isActive: m.id === modeId }))
+      )
+      return { previous }
+    },
+    onError: (err, modeId, context) => {
+      queryClient.setQueryData(['modes'], context?.previous)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['modes'] })
+    },
+  })
+}
+```
+
+## Zustand — Client State
+
+```typescript
+// ✅ One store per domain — not one giant store
+// stores/ui.store.ts    → panel open/closed, active tab, toast queue
+// stores/mode.store.ts  → active mode session state
+// stores/auth.store.ts  → current user, token
+
+// ✅ Typed store with actions co-located
+interface UiStore {
+  isSidePanelOpen: boolean
+  activeNavItem: string
+  toasts: Toast[]
+
+  // actions co-located with state
+  openSidePanel: () => void
+  closeSidePanel: () => void
+  setActiveNav: (item: string) => void
+  addToast: (toast: Omit<Toast, 'id'>) => void
+  removeToast: (id: string) => void
+}
+
+export const useUiStore = create<UiStore>((set) => ({
+  isSidePanelOpen: false,
+  activeNavItem: 'overview',
+  toasts: [],
+
+  openSidePanel:  () => set({ isSidePanelOpen: true }),
+  closeSidePanel: () => set({ isSidePanelOpen: false }),
+  setActiveNav:   (item) => set({ activeNavItem: item }),
+  addToast: (toast) => set((s) => ({
+    toasts: [...s.toasts, { ...toast, id: crypto.randomUUID() }]
+  })),
+  removeToast: (id) => set((s) => ({
+    toasts: s.toasts.filter(t => t.id !== id)
+  })),
+}))
+
+// ✅ Subscribe to individual slices — prevents unnecessary re-renders
+const isSidePanelOpen = useUiStore(s => s.isSidePanelOpen)
+const addToast = useUiStore(s => s.addToast)
+
+// ❌ Never subscribe to the whole store
+const store = useUiStore()  // re-renders on every state change
+```
+
+## WebSocket + React Query Integration
+
+```typescript
+// ✅ WebSocket pushes updates into React Query cache — single source of truth
+export function useWebSocketSync(userId: string) {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const socket = getSocket()  // singleton socket instance
+
+    socket.on('metrics:updated', (delta: MetricsDelta) => {
+      queryClient.setQueryData(
+        QUERY_KEYS.metrics(userId, 'today'),
+        (old: UserMetrics) => applyDelta(old, delta)
+      )
+    })
+
+    socket.on('download:new', (download: Download) => {
+      queryClient.setQueryData(
+        QUERY_KEYS.downloads(userId, 1),
+        (old: DownloadPage) => ({
+          ...old,
+          items: [download, ...old.items].slice(0, 50)
+        })
+      )
+    })
+
+    return () => {
+      socket.off('metrics:updated')
+      socket.off('download:new')
+    }
+  }, [userId, queryClient])
+}
+```

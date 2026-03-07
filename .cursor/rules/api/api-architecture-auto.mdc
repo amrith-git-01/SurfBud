@@ -1,0 +1,211 @@
+---
+description: Backend architecture, layer rules, Express patterns for api/ folder
+globs: ["api/**/*.ts"]
+alwaysApply: false
+---
+
+# API — Backend Architecture Rules
+
+## Layer Hierarchy — Non-Negotiable
+
+```
+Route → Controller → Service → Repository → Model
+```
+
+### Controller Rules
+```typescript
+// ✅ Controllers only: extract params → call ONE service method → return response
+export const getModeSession = asyncHandler(async (req: Request, res: Response) => {
+  const { sessionId } = req.params
+  const session = await ModeService.getSession(sessionId, req.user.id)
+  res.json({ success: true, data: session })
+})
+
+// ❌ Never: business logic in controller
+export const getModeSession = asyncHandler(async (req, res) => {
+  const session = await SessionModel.findById(req.params.sessionId)  // raw DB in controller
+  if (session.userId !== req.user.id) throw new Error('Forbidden')   // business logic in controller
+  res.json(session)
+})
+```
+
+### Service Rules
+```typescript
+// ✅ Services: ALL business logic, call repositories, call other services
+export class ModeService {
+  static async startSession(userId: string, modeId: string): Promise<ModeSession> {
+    const mode = await ModeRepository.findById(modeId)
+    if (!mode) throw new NotFoundError('Mode not found')
+    if (mode.userId !== userId) throw new ForbiddenError()
+
+    const session = await SessionRepository.create({ userId, modeId, startedAt: new Date() })
+
+    // Queue AI job — NEVER call Groq directly here
+    await AIQueue.add('generate-mode-suggestion', { userId, modeId })
+
+    return session
+  }
+}
+
+// ❌ Never: raw DB queries in service
+export class ModeService {
+  static async startSession(userId: string, modeId: string) {
+    const session = await SessionModel.create({ userId, modeId })  // raw model in service
+  }
+}
+```
+
+### Repository Rules
+```typescript
+// ✅ Repositories: ALL database queries, zero business logic
+export class SessionRepository {
+  static async findByUserId(userId: string, limit = 20): Promise<ModeSession[]> {
+    return SessionModel
+      .find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean()
+  }
+
+  static async incrementModeTime(userId: string, modeId: string, minutes: number): Promise<void> {
+    await UserMetricsModel.updateOne(
+      { userId },
+      { $inc: { 'modeTime.$[el].totalMinutes': minutes } },
+      { arrayFilters: [{ 'el.modeId': modeId }] }
+    )
+  }
+}
+
+// ❌ Never: business logic or validation in repository
+export class SessionRepository {
+  static async create(data: any) {
+    if (!data.modeId) throw new Error('modeId required')  // validation belongs in service/controller
+    return SessionModel.create(data)
+  }
+}
+```
+
+## Error Handling
+
+```typescript
+// ✅ Use custom error classes — never throw plain Error in services
+export class AppError extends Error {
+  constructor(
+    public message: string,
+    public statusCode: number,
+    public code: string
+  ) {
+    super(message)
+  }
+}
+
+export class NotFoundError    extends AppError { constructor(m: string) { super(m, 404, 'NOT_FOUND') } }
+export class ForbiddenError   extends AppError { constructor(m: string = 'Forbidden') { super(m, 403, 'FORBIDDEN') } }
+export class ValidationError  extends AppError { constructor(m: string) { super(m, 400, 'VALIDATION_ERROR') } }
+export class ConflictError    extends AppError { constructor(m: string) { super(m, 409, 'CONFLICT') } }
+
+// ✅ Global error handler in middleware — never send raw errors to client
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({ success: false, error: { code: err.code, message: err.message } })
+  }
+  console.error(err)
+  res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' } })
+})
+```
+
+## Zod Validation — All Incoming Data
+
+```typescript
+// ✅ Every route that accepts a body or params must have a Zod schema
+const CreateModeSchema = z.object({
+  name: z.string().min(1).max(50),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+  tabs: z.array(z.string().url()).max(20),
+  blockedDomains: z.array(z.string()).max(50),
+  focusTimerMinutes: z.number().int().min(5).max(120).optional(),
+})
+
+router.post('/modes', authenticate, validate(CreateModeSchema), ModeController.create)
+
+// ✅ validate middleware — reusable
+export const validate = (schema: ZodSchema) => (req: Request, res: Response, next: NextFunction) => {
+  const result = schema.safeParse(req.body)
+  if (!result.success) {
+    return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', issues: result.error.issues } })
+  }
+  req.body = result.data
+  next()
+}
+```
+
+## Mongoose — Always Use `.lean()`
+
+```typescript
+// ✅ Use .lean() on all read queries — returns plain JS objects, not Mongoose documents
+const sessions = await SessionModel.find({ userId }).lean()
+
+// ❌ Skip .lean() only when you need Mongoose document methods (.save(), virtuals)
+const session = await SessionModel.findById(id)
+session.endedAt = new Date()
+await session.save()
+```
+
+## MongoDB Indexes — Define in Model
+
+```typescript
+// ✅ All indexes defined in the model schema
+SessionSchema.index({ userId: 1, createdAt: -1 })
+SessionSchema.index({ userId: 1, modeId: 1, createdAt: -1 })
+
+// ✅ TTL index for auto-expiring documents
+TabEventSchema.index({ timestamp: 1 }, { expireAfterSeconds: 604800 })  // 7 days
+```
+
+## BullMQ — AI Always Async
+
+```typescript
+// ✅ AI jobs are always queued — never called inline
+await AIQueue.add('generate-daily-nudge', {
+  userId,
+  sessionId: session.id,
+  modeId: session.modeId,
+})
+return res.json({ success: true, data: session })  // return immediately
+
+// ❌ Never call AI in request-response cycle
+const insight = await groq.chat.completions.create({ ... })  // blocks for 3-8 seconds
+return res.json({ insight })
+```
+
+## Environment Variables
+
+```typescript
+// ✅ Always validate env at startup with Zod — crashes fast if misconfigured
+const EnvSchema = z.object({
+  PORT: z.coerce.number().default(3001),
+  MONGODB_URI: z.string().url(),
+  REDIS_URL: z.string().url(),
+  JWT_SECRET: z.string().min(32),
+  GROQ_API_KEY: z.string().startsWith('gsk_'),
+  NODE_ENV: z.enum(['development', 'production', 'test']),
+  DASHBOARD_ORIGIN: z.string().url(),
+  EXTENSION_ORIGIN: z.string(),
+})
+
+export const env = EnvSchema.parse(process.env)
+// If any variable is missing or wrong type, process exits before accepting requests
+```
+
+## Route Structure
+
+```typescript
+// ✅ Middleware order — always: helmet → cors → rateLimiter → authenticate → validate → handler
+router.post(
+  '/sessions',
+  rateLimiter,
+  authenticate,
+  validate(CreateSessionSchema),
+  SessionController.create
+)
+```

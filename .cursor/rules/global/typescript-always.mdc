@@ -1,0 +1,152 @@
+---
+description: TypeScript standards applied across all three folders
+alwaysApply: true
+---
+
+# TypeScript Rules
+
+## Strict Mode — Always On
+
+Every `tsconfig.json` in every folder must have:
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}
+```
+
+Never disable strict mode. Never add `@ts-ignore`. Use `@ts-expect-error` with a comment only when absolutely unavoidable.
+
+## Type Annotations
+
+```typescript
+// ✅ Always type function parameters and return values
+function calculateFocusScore(sessions: ModeSession[]): number { }
+
+// ✅ Always type async function returns
+async function getUserMetrics(userId: string): Promise<UserMetrics> { }
+
+// ❌ Never use `any`
+function process(data: any): any { }
+
+// ✅ Use `unknown` when type is uncertain, then narrow it
+function process(data: unknown): string {
+  if (typeof data === 'string') return data
+  throw new Error('Expected string')
+}
+```
+
+## Naming Conventions
+
+```
+PascalCase     → types, interfaces, classes, React components, enums
+camelCase      → variables, functions, methods, object keys
+SCREAMING_CASE → constants, enum values
+kebab-case     → file names (mode.service.ts, user.repository.ts)
+```
+
+## File Naming
+
+```
+mode.service.ts         → service files
+mode.repository.ts      → repository files
+mode.controller.ts      → controller files
+mode.model.ts           → mongoose model files
+mode.types.ts           → type definition files
+mode.routes.ts          → route files
+useMetrics.ts           → React hooks (camelCase with use prefix)
+MetricCard.tsx          → React components (PascalCase)
+```
+
+## Interfaces vs Types
+
+```typescript
+// ✅ Use interface for object shapes that may be extended
+interface UserMetrics {
+  userId: string
+  modeTime: ModeTimeEntry[]
+}
+
+// ✅ Use type for unions, intersections, primitives, utility types
+type ChartType = 'line' | 'bar' | 'pie' | 'radar' | 'area'
+type PartialMetrics = Partial<UserMetrics>
+```
+
+## Null Safety
+
+```typescript
+// ✅ Always handle null/undefined explicitly
+const user = await UserRepository.findById(id)
+if (!user) throw new NotFoundError('User not found')
+
+// ❌ Never assume a query result is non-null
+const user = await UserRepository.findById(id)
+return user.email  // crash if user is null
+```
+
+## Async / Await
+
+```typescript
+// ✅ Always use async/await — never .then().catch() chains
+const result = await someService.doThing()
+
+// ✅ Always wrap async route handlers — errors propagate to error middleware
+router.get('/metrics', asyncHandler(async (req, res) => {
+  const data = await MetricsService.getUserMetrics(req.user.id)
+  res.json(data)
+}))
+
+// ❌ Never leave floating promises
+someAsyncFunction()  // unhandled rejection risk
+
+// ✅ Explicitly void or await
+void someFireAndForgetFunction()
+await someImportantFunction()
+```
+
+## Enums
+
+```typescript
+// ✅ Use string enums for readability and debuggability
+enum ModeType {
+  DEV       = 'dev',
+  CHILL     = 'chill',
+  DEEP_WORK = 'deep_work',
+  STUDY     = 'study',
+  CUSTOM    = 'custom',
+}
+
+// ❌ Avoid numeric enums — values are meaningless in logs
+enum Status { ACTIVE, INACTIVE }  // 0, 1 — confusing
+```
+
+## Imports
+
+```typescript
+// ✅ Group imports: external → internal → types
+import express from 'express'
+import { z } from 'zod'
+
+import { ModeService } from '../services/mode.service'
+import { asyncHandler } from '../utils/async-handler'
+
+import type { Request, Response } from 'express'
+import type { ModeSession } from '../types/shared/mode.types'
+```
+
+## No Magic Numbers or Strings
+
+```typescript
+// ❌ Magic numbers
+if (sessions.length > 50) { }
+const ttl = 900
+
+// ✅ Named constants
+const MAX_SESSIONS_PER_PAGE = 50
+const JWT_ACCESS_TTL_SECONDS = 900
+if (sessions.length > MAX_SESSIONS_PER_PAGE) { }
+```

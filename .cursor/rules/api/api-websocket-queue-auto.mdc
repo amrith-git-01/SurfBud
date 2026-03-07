@@ -1,0 +1,182 @@
+---
+description: WebSocket (Socket.IO) and BullMQ async job queue rules for the api/ folder
+globs: ["api/**/*.ts"]
+alwaysApply: false
+---
+
+# API — WebSocket & BullMQ Rules
+
+## WebSocket — Delta Pushes Only
+
+```typescript
+// ✅ Always push deltas — never full dataset refreshes
+// Bad: sends entire metrics object on every download
+socket.emit('metrics:updated', await MetricsService.getAll(userId))
+
+// ✅ Send only what changed
+socket.emit('metrics:updated', {
+  type: 'metrics:updated',
+  userId,
+  delta: {
+    downloads: metrics.today.downloads,
+    newFiles:  metrics.today.newFiles,
+    duplicates: metrics.today.duplicates,
+  }
+} satisfies WsMetricsDelta)
+
+// ✅ Always join a user-specific room on connect — never broadcast to all
+io.on('connection', (socket) => {
+  socket.on('auth', async ({ token }) => {
+    const userId = await verifyToken(token)
+    socket.join(`user:${userId}`)          // user-specific room
+    socket.data.userId = userId
+  })
+})
+
+// ✅ Emit to user room — never io.emit() (all clients)
+io.to(`user:${userId}`).emit('download:new', { type: 'download:new', userId, download })
+
+// ✅ All emitted events use WsEvent union type from shared types
+const event: WsEvent = {
+  type: 'insight:new',
+  userId,
+  insight,
+}
+io.to(`user:${userId}`).emit(event.type, event)
+```
+
+## BullMQ — Job Queue Rules
+
+```typescript
+// ✅ Queue names as constants — never inline strings
+export const QUEUE_NAMES = {
+  AI_INSIGHTS:      'ai-insights',
+  METRICS_UPDATE:   'metrics-update',
+  DOWNLOAD_PROCESS: 'download-process',
+  STREAK_CHECK:     'streak-check',
+} as const
+
+// ✅ Job payload types
+interface AIInsightJobData {
+  userId:    string
+  sessionId: string
+  modeId:    string
+  trigger:   'session_end' | 'daily' | 'streak_milestone'
+}
+
+// ✅ Queue with sensible defaults
+export const aiQueue = new Queue<AIInsightJobData>(QUEUE_NAMES.AI_INSIGHTS, {
+  connection: redis,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,          // 2s, 4s, 8s
+    },
+    removeOnComplete: { count: 100 },
+    removeOnFail:     { count: 50 },
+  },
+})
+
+// ✅ Workers handle one concern each — never one giant worker
+// ai-insights.worker.ts   → generates insights, sends via WebSocket
+// metrics.worker.ts       → updates pre-materialized UserMetrics document
+// download.worker.ts      → processes download events, deduplication
+
+export const aiWorker = new Worker<AIInsightJobData>(
+  QUEUE_NAMES.AI_INSIGHTS,
+  async (job) => {
+    const { userId, sessionId, modeId, trigger } = job.data
+
+    // Groq multi-model fallback chain
+    const insight = await AIRouter.generate({
+      userId, sessionId, modeId, trigger,
+    })
+
+    // Push result via WebSocket
+    io.to(`user:${userId}`).emit('insight:new', {
+      type: 'insight:new',
+      userId,
+      insight,
+    } satisfies WsInsightNew)
+
+    // Persist insight
+    await InsightRepository.create({ userId, sessionId, ...insight })
+  },
+  { connection: redis, concurrency: 5 }
+)
+
+// ✅ Always handle worker errors
+aiWorker.on('failed', (job, err) => {
+  console.error(`AI job ${job?.id} failed:`, err.message)
+})
+```
+
+## Groq AI Router — Multi-Model Fallback
+
+```typescript
+// ✅ Model selection by task complexity — not user tier (no tiers in Phase 1)
+export class AIRouter {
+  private static readonly MODEL_CHAIN = [
+    'llama-3.3-70b-versatile',    // primary — most capable
+    'llama-3.1-8b-instant',       // fallback — faster, lighter
+    'gemma2-9b-it',               // last resort
+  ]
+
+  static async generate(context: AIContext): Promise<AIInsight> {
+    const prompt = buildPrompt(context)
+    let lastError: Error | undefined
+
+    for (const model of this.MODEL_CHAIN) {
+      try {
+        const response = await groq.chat.completions.create({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 300,
+          temperature: 0.7,
+        })
+        return parseInsight(response.choices[0].message.content ?? '')
+      } catch (err) {
+        lastError = err as Error
+        continue    // try next model in chain
+      }
+    }
+    throw lastError ?? new Error('All models failed')
+  }
+}
+
+// ✅ Keep prompts in a separate prompts/ directory — not inline in worker
+// api/src/ai/prompts/daily-nudge.prompt.ts
+// api/src/ai/prompts/mode-suggestion.prompt.ts
+// api/src/ai/prompts/streak-celebration.prompt.ts
+```
+
+## Pre-Materialized Metrics — Critical Pattern
+
+```typescript
+// ✅ Metrics are NEVER calculated on demand in request handlers
+// They are maintained as a pre-materialized document, updated by BullMQ workers
+
+// ❌ WRONG — recalculating on every request (slow, unscalable)
+router.get('/metrics', authenticate, async (req, res) => {
+  const downloads = await DownloadModel.countDocuments({ userId: req.user.id })
+  const today = await SessionModel.aggregate([...])
+  res.json({ downloads, today })
+})
+
+// ✅ CORRECT — read pre-materialized document (fast, O(1))
+router.get('/metrics', authenticate, asyncHandler(async (req, res) => {
+  const metrics = await UserMetricsRepository.findByUserId(req.user.id)
+  res.json({ success: true, data: metrics })
+}))
+
+// ✅ The metrics document is updated by the metrics.worker.ts after each event
+// metrics.worker.ts handles: new download, session end, streak check
+export const metricsWorker = new Worker('metrics-update', async (job) => {
+  const { userId, event } = job.data
+  await UserMetricsRepository.applyEvent(userId, event)
+  // After update, push delta via WebSocket
+  const updated = await UserMetricsRepository.findByUserId(userId)
+  io.to(`user:${userId}`).emit('metrics:updated', buildDelta(updated))
+}, { connection: redis })
+```

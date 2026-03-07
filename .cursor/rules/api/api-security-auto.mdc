@@ -1,0 +1,123 @@
+---
+description: Security rules for the api/ folder — auth, JWT, rate limiting, headers
+globs: ["api/**/*.ts"]
+alwaysApply: false
+---
+
+# API — Security Rules
+
+## JWT — Access + Refresh Token Pattern
+
+```typescript
+// ✅ Access token: short-lived (15 min), in Authorization header
+// ✅ Refresh token: long-lived (7 days), stored in Redis + httpOnly cookie
+
+// Issue tokens
+const accessToken  = jwt.sign({ userId, email }, env.JWT_SECRET, { expiresIn: '15m' })
+const refreshToken = crypto.randomBytes(64).toString('hex')
+
+// Store refresh token in Redis
+await redis.setex(`refresh:${userId}:${refreshToken}`, 7 * 24 * 60 * 60, '1')
+
+// Set refresh token in httpOnly cookie — never in response body
+res.cookie('refreshToken', refreshToken, {
+  httpOnly: true,
+  secure: env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+})
+
+// ❌ Never store refresh token in response body — client JS can read it
+res.json({ accessToken, refreshToken })
+```
+
+## Authentication Middleware
+
+```typescript
+// ✅ Always verify JWT — never trust req.headers without verification
+export const authenticate = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const token = req.headers.authorization?.replace('Bearer ', '')
+  if (!token) throw new UnauthorizedError('No token provided')
+
+  const payload = jwt.verify(token, env.JWT_SECRET) as JWTPayload
+  req.user = { id: payload.userId, email: payload.email }
+  next()
+})
+```
+
+## Rate Limiting — Redis-Backed
+
+```typescript
+// ✅ Rate limit all public endpoints — per IP for auth, per user for authenticated routes
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 10,                     // 10 login attempts per 15 min
+  keyGenerator: (req) => req.ip,
+  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many attempts' } },
+})
+
+const apiRateLimiter = rateLimit({
+  windowMs: 60 * 1000,         // 1 minute
+  max: 120,                    // 120 requests per minute per user
+  keyGenerator: (req) => req.user?.id ?? req.ip,
+})
+```
+
+## Security Headers — Helmet
+
+```typescript
+// ✅ Always use helmet — must be the first middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      connectSrc:  ["'self'", env.DASHBOARD_ORIGIN, env.EXTENSION_ORIGIN],
+    }
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true },
+}))
+```
+
+## CORS — Whitelist Only
+
+```typescript
+// ✅ Whitelist only known origins — never use origin: '*' in production
+app.use(cors({
+  origin: [env.DASHBOARD_ORIGIN, env.EXTENSION_ORIGIN],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+}))
+
+// ❌ Never
+app.use(cors())           // allows any origin
+app.use(cors({ origin: '*' }))
+```
+
+## Input — Never Trust User Data
+
+```typescript
+// ✅ Validate with Zod before any processing — see api-architecture rule
+// ✅ Never use user input directly in MongoDB queries without sanitization
+// ✅ Never eval() or new Function() with user input
+// ✅ Use parameterized queries — Mongoose handles this automatically
+
+// ❌ Never build filter objects from raw request body
+const filter = req.body  // user controls the query
+await UserModel.find(filter)
+
+// ✅ Whitelist allowed filter fields explicitly
+const { status, modeId } = req.body
+await SessionModel.find({ userId: req.user.id, ...(status && { status }), ...(modeId && { modeId }) })
+```
+
+## Secrets — Never in Code
+
+```typescript
+// ❌ Never hardcode secrets
+const JWT_SECRET = 'my-secret-key'
+const GROQ_KEY = 'gsk_abc123'
+
+// ✅ Always from validated env
+const JWT_SECRET = env.JWT_SECRET
+const GROQ_KEY = env.GROQ_API_KEY
+```
