@@ -7,7 +7,11 @@ import { env } from "./config/env";
 import { rootRouter } from "./routes";
 import { errorHandler } from "./middleware/error.middleware";
 import { connectDB } from "./config/db";
+import { redis } from "./config/redis";
+import { startScheduler } from "./jobs/scheduler";
 import { logger } from "./utils/logger";
+
+import "./jobs/workers/metrics-rollup.worker";
 
 const app = express();
 
@@ -15,7 +19,15 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: [env.DASHBOARD_ORIGIN, env.EXTENSION_ORIGIN],
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (origin === env.DASHBOARD_ORIGIN) return callback(null, true);
+      if (origin.startsWith("chrome-extension://"))
+        return callback(null, true);
+      if (env.EXTENSION_ORIGIN && origin === env.EXTENSION_ORIGIN)
+        return callback(null, true);
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   }),
 );
@@ -52,7 +64,10 @@ app.use("/api", rootRouter);
 app.use(errorHandler);
 
 async function bootstrap(): Promise<void> {
+  await redis.connect();
   await connectDB();
+  await startScheduler();
+
   app.listen(env.PORT, () =>
     logger.info(`Server running on port ${env.PORT}`),
   );
