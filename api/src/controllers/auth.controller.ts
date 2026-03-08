@@ -1,15 +1,40 @@
 import type { Request, Response } from "express";
 import { AuthService } from "../services/auth.service";
+import { UserRepository } from "../repositories/user.repository";
 import { asyncHandler } from "../utils/asyncHandler";
+import { redis } from "../config/redis";
+import { logger } from "../utils/logger";
 
 export const AuthController = {
   register: asyncHandler(async (req: Request, res: Response) => {
-    const { email, password, displayName } = req.body as {
+    const { email, password, displayName, timezone } = req.body as {
       email: string;
       password: string;
       displayName: string;
+      timezone?: string;
     };
-    const result = await AuthService.register(email, password, displayName);
+    const result = await AuthService.register(
+      email,
+      password,
+      displayName,
+      timezone,
+    );
+    if (timezone) {
+      UserRepository.updateTimezone(result.userId, timezone).catch((err) =>
+        logger.warn({ userId: result.userId, err }, "timezone update failed"),
+      );
+      redis
+        .get("active:timezones")
+        .then((raw) => {
+          const cached: string[] = JSON.parse(raw ?? "[]");
+          if (!cached.includes(timezone)) {
+            cached.push(timezone);
+            return redis.set("active:timezones", JSON.stringify(cached));
+          }
+          return undefined;
+        })
+        .catch(() => {});
+    }
     res.status(201).json({
       success: true,
       data: {
@@ -21,8 +46,31 @@ export const AuthController = {
   }),
 
   login: asyncHandler(async (req: Request, res: Response) => {
-    const { email, password } = req.body as { email: string; password: string };
-    const result = await AuthService.login(email, password);
+    const { email, password, timezone } = req.body as {
+      email: string;
+      password: string;
+      timezone?: string;
+    };
+    const result = await AuthService.login(email, password, timezone);
+    if (timezone) {
+      UserRepository.updateTimezone(result.userId, timezone).catch((err) =>
+        logger.warn(
+          { userId: result.userId, err },
+          "timezone update failed",
+        ),
+      );
+      redis
+        .get("active:timezones")
+        .then((raw) => {
+          const cached: string[] = JSON.parse(raw ?? "[]");
+          if (!cached.includes(timezone)) {
+            cached.push(timezone);
+            return redis.set("active:timezones", JSON.stringify(cached));
+          }
+          return undefined;
+        })
+        .catch(() => {});
+    }
     res.status(200).json({
       success: true,
       data: {
