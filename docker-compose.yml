@@ -1,0 +1,13 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: surfbud-redis
+    ports:
+      - "6380:6379"  # Use 6380 to avoid conflict with Redis 3.x on 6379
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  redis-data:
