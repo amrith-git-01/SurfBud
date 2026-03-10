@@ -26,9 +26,8 @@ export const DownloadController = {
 
   getTrend: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const period = Number(
-      (req.query as { period?: string })?.period ?? "7",
-    );
+    const validatedQuery = res.locals.validatedQuery || {};
+    const period = Number(validatedQuery.period ?? "7");
     const trend = await DownloadService.getTrend(userId, period);
     res.json({ success: true, data: { trend } });
   }),
@@ -42,7 +41,7 @@ export const DownloadController = {
   getEvents: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const timezone = req.user!.timezone ?? "UTC";
-    const q = (req.query ?? {}) as Record<string, unknown>;
+    const q = (res.locals.validatedQuery ?? {}) as Record<string, unknown>;
     const result = await DownloadService.getEvents(
       userId,
       {
