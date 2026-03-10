@@ -1,4 +1,5 @@
 import express from "express";
+import { createServer } from "http";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
@@ -10,10 +11,12 @@ import { connectDB } from "./config/db";
 import { redis } from "./config/redis";
 import { startScheduler } from "./jobs/scheduler";
 import { logger } from "./utils/logger";
+import { socketManager } from "./websocket/socket.manager";
 
 import "./jobs/workers/metrics-rollup.worker";
 
 const app = express();
+const httpServer = createServer(app);
 
 app.use(helmet());
 
@@ -68,7 +71,10 @@ async function bootstrap(): Promise<void> {
   await connectDB();
   await startScheduler();
 
-  app.listen(env.PORT, () =>
+  // Initialize Socket.IO
+  socketManager.initialize(httpServer);
+
+  httpServer.listen(env.PORT, () =>
     logger.info(`Server running on port ${env.PORT}`),
   );
 }
