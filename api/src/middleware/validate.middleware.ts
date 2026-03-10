@@ -34,8 +34,27 @@ export function validateQuery(schema: ZodType) {
       });
       return;
     }
-    (req as { query: Record<string, unknown> }).query =
-      result.data as Record<string, unknown>;
+    // Express 5.x makes req.query a getter, so we pass validated data via res.locals
+    res.locals.validatedQuery = result.data;
+    next();
+  };
+}
+
+export function validateParams(schema: ZodType) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const result = schema.safeParse(req.params);
+    if (!result.success) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid path parameters",
+          details: result.error.flatten().fieldErrors,
+        },
+      });
+      return;
+    }
+    req.params = result.data as Record<string, string>;
     next();
   };
 }
