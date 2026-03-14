@@ -8,11 +8,13 @@ const RegisterSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   displayName: z.string().min(1, "Display name is required"),
+  timezone: z.string().optional(),
 });
 
 const LoginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  timezone: z.string().optional(),
 });
 
 export const authRouter = Router();
