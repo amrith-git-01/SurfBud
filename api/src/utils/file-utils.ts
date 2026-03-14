@@ -1,13 +1,17 @@
-export type FileCategory =
-  | "document"
-  | "image"
-  | "text"
-  | "code"
-  | "executable"
-  | "archive"
-  | "audio"
-  | "video"
-  | "other";
+export const FILE_CATEGORIES = [
+  "document",
+  "image",
+  "text",
+  "code",
+  "executable",
+  "archive",
+  "audio",
+  "video",
+  "other",
+] as const;
+
+export type FileCategory = (typeof FILE_CATEGORIES)[number];
+
 function getFileExtension(filename: string): string | undefined {
   const lastDot = filename.lastIndexOf(".");
   if (lastDot === -1 || lastDot === filename.length - 1) return undefined;

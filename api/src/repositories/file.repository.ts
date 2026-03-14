@@ -1,21 +1,40 @@
 import { type IFile, File } from "../models/file.model";
+import { Types } from "mongoose";
+
+export interface CreateFileDto {
+  userId: string;
+  hash: string;
+  filename: string;
+  url?: string;
+  savedPath?: string;
+  size?: number;
+  fileExtension?: string;
+  fileCategory?: string;
+  mimeType?: string;
+  sourceDomain?: string;
+}
 
 export const FileRepository = {
-  async findByUserAndHash(userId: string, hash: string): Promise<IFile | null> {
-    return File.findOne({ userId, hash }).exec();
+  async findByHash(userId: string, hash: string): Promise<IFile | null> {
+    return File.findOne({ userId: new Types.ObjectId(userId), hash })
+      .lean()
+      .exec();
   },
 
-  async create(data: {
-    userId: string;
-    hash: string;
-    filename: string;
-    url?: string;
-    size?: number;
-    fileExtension?: string;
-    fileCategory?: string;
-    mimeType?: string;
-    sourceDomain?: string;
-  }): Promise<IFile> {
-    return File.create(data);
+  async create(data: CreateFileDto): Promise<IFile> {
+    const doc = await File.create({
+      ...data,
+      userId: new Types.ObjectId(data.userId),
+    });
+    return doc.toObject() as IFile;
+  },
+
+  async findById(userId: string, fileId: string): Promise<IFile | null> {
+    return File.findOne({
+      _id: new Types.ObjectId(fileId),
+      userId: new Types.ObjectId(userId),
+    })
+      .lean()
+      .exec();
   },
 };

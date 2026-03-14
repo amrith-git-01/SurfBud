@@ -20,7 +20,11 @@ export function authenticate(
   const token = authHeader.slice(7);
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
-    req.user = { id: payload.sub, email: payload.email };
+    req.user = {
+      id: payload.sub,
+      email: payload.email,
+      timezone: payload.timezone ?? "UTC",
+    };
     next();
   } catch {
     res.status(401).json({

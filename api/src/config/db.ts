@@ -13,10 +13,10 @@ export async function connectDB(): Promise<void> {
       return;
     } catch (error) {
       attempt++;
-      logger.error("MongoDB connection failed", {
-        attempt,
-        error: (error as Error).message,
-      });
+      logger.error(
+        { attempt, error: (error as Error).message },
+        "MongoDB connection failed",
+      );
       if (attempt >= MAX_RETRIES) throw error;
       await new Promise((res) => setTimeout(res, 2_000 * attempt));
     }

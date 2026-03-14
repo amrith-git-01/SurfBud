@@ -1,24 +1,39 @@
 import { Router } from "express";
-import { z } from "zod";
 import { authenticate } from "../middleware/auth.middleware";
-import { validate } from "../middleware/validate.middleware";
+import { validate, validateQuery } from "../middleware/validate.middleware";
 import { DownloadController } from "../controllers/download.controller";
-const TrackDownloadSchema = z.object({
-  hash: z.string().min(1, "hash is required"),
-  filename: z.string().min(1, "filename is required"),
-  url: z.string().optional(),
-  size: z.number().int().nonnegative().optional(),
-  mimeType: z.string().optional(),
-  sourceDomain: z.string().optional(),
-  durationMs: z.number().int().nonnegative().optional(),
-  isRemoved: z.boolean().optional(),
-  removedAt: z.string().datetime().optional(),
-});
+import {
+  ProcessDownloadSchema,
+  TrendQuerySchema,
+  EventsQuerySchema,
+} from "../schemas/download.schemas";
+
 export const downloadRouter = Router();
-// All download tracking requires authentication
+
+downloadRouter.use(authenticate);
+
 downloadRouter.post(
-  "/track",
-  authenticate,
-  validate(TrackDownloadSchema),
-  DownloadController.trackDownload,
+  "/",
+  validate(ProcessDownloadSchema),
+  DownloadController.processDownload,
 );
+
+downloadRouter.patch("/:id/remove", DownloadController.markRemoved);
+
+downloadRouter.get("/stats", DownloadController.getStats);
+downloadRouter.get(
+  "/trend",
+  validateQuery(TrendQuerySchema),
+  DownloadController.getTrend,
+);
+downloadRouter.get("/recent", DownloadController.getRecentEvents);
+downloadRouter.get(
+  "/events",
+  validateQuery(EventsQuerySchema),
+  DownloadController.getEvents,
+);
+downloadRouter.get("/duplicates", DownloadController.getDuplicateGroups);
+downloadRouter.get("/categories", DownloadController.getCategories);
+downloadRouter.get("/domains", DownloadController.getDomains);
+downloadRouter.get("/files/:id/timeline", DownloadController.getFileTimeline);
+downloadRouter.get("/files/:id", DownloadController.getFileById);
