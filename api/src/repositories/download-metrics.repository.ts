@@ -15,7 +15,7 @@ export const DownloadMetricsRepository = {
     await UserDownloadMetrics.findOneAndUpdate(
       { userId: new Types.ObjectId(userId) },
       update,
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: "after" },
     ).exec();
   },
 };
