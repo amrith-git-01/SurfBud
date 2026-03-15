@@ -33,5 +33,5 @@
     /* Project references */
     "composite": true
   },
-  "include": ["src"]
+  "include": ["src", "../api/src/types/shared/websocket.types.ts"]
 }

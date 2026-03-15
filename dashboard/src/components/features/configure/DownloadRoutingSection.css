@@ -1,0 +1,18 @@
+.sb-routing-canvas .react-flow__pane,
+.sb-routing-canvas .react-flow__node {
+  cursor: grab !important;
+}
+
+.sb-routing-canvas .react-flow__pane.dragging,
+.sb-routing-canvas .react-flow__node.dragging,
+.sb-routing-canvas .react-flow__node:active {
+  cursor: grabbing !important;
+}
+
+.sb-routing-canvas .react-flow__node .nodrag,
+.sb-routing-canvas .react-flow__node input,
+.sb-routing-canvas .react-flow__node button,
+.sb-routing-canvas .react-flow__controls,
+.sb-routing-canvas .react-flow__controls button {
+  cursor: auto;
+}

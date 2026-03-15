@@ -20,7 +20,6 @@ const categoryStatsSchema = new Schema<ICategoryStats>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     category: {
       type: String,

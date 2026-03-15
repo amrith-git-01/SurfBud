@@ -7,14 +7,19 @@ export const UserRepository = {
   },
 
   async findById(id: string): Promise<IUser | null> {
-    return UserModel.findById(id);
+    return UserModel.findById(id).lean();
   },
 
   async create(data: {
     email: string;
     passwordHash: string;
     displayName: string;
+    timezone?: string;
   }): Promise<IUser> {
     return UserModel.create(data);
+  },
+
+  async updateTimezone(userId: string, timezone: string): Promise<void> {
+    await UserModel.findByIdAndUpdate(userId, { timezone });
   },
 };

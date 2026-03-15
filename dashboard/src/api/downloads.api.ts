@@ -1,0 +1,392 @@
+import { api } from "../services/api";
+
+const BASE = "/api/downloads";
+
+interface ApiSuccess<T> {
+  success: true;
+  data: T;
+}
+
+type ApiResponse<T> = ApiSuccess<T>;
+
+// ─── Stats (Section 1 — metric cards, Section 3 — health bars) ───
+export interface UserDownloadMetrics {
+  todayCount: number;
+  todayDate: string;
+  prevTodayCount: number;
+  weekCount: number;
+  weekStart: string;
+  prevWeekCount: number;
+  monthCount: number;
+  monthStart: string;
+  prevMonthCount: number;
+  totalNew: number;
+  totalDuplicates: number;
+  totalSize: number;
+  newSize: number;
+  duplicateSize: number;
+  updatedAt: string;
+}
+
+// ─── Trend (Section 2 — activity chart) ───
+export interface TrendBucket {
+  date: string;
+  total: number;
+  newFiles: number;
+  duplicates: number;
+}
+
+// ─── File populate shape (recent/events have fileId populated) ───
+export interface FilePopulate {
+  _id: string;
+  fileCategory?: string;
+  fileExtension?: string;
+  mimeType?: string;
+  size?: number;
+}
+
+export interface DownloadEvent {
+  _id: string;
+  userId: string;
+  fileId: string | FilePopulate;
+  filename: string;
+  savedPath?: string;
+  sourceDomain?: string;
+  status: "new" | "duplicate";
+  duration?: number;
+  isRemoved: boolean;
+  removedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventsResponse {
+  events: DownloadEvent[];
+  total: number;
+}
+
+// ─── Section 5 — duplicate groups ───
+export interface DuplicateGroup {
+  fileId?: string;
+  filename: string;
+  dupCount: number;
+  totalSize: number;
+}
+
+// ─── Section 6 — categories & domains ───
+export interface CategoryStat {
+  category: string;
+  totalCount: number;
+  newCount: number;
+  dupCount: number;
+  totalSize: number;
+  newSize: number;
+  dupSize: number;
+}
+
+export interface DomainStat {
+  domain: string;
+  totalCount: number;
+  newCount: number;
+  dupCount: number;
+  totalSize: number;
+  newSize: number;
+  dupSize: number;
+}
+
+// ─── Drawer — file detail ───
+export interface FileDetail {
+  _id: string;
+  userId: string;
+  hash: string;
+  filename: string;
+  url: string;
+  savedPath?: string;
+  size?: number;
+  fileExtension?: string;
+  fileCategory?: string;
+  mimeType?: string;
+  sourceDomain?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventsQueryParams {
+  page?: number;
+  limit?: number;
+  period?: "today" | "week" | "month" | "all";
+  status?: "new" | "duplicate";
+  category?: string;
+  domain?: string;
+  excludeDomains?: string[];
+  search?: string;
+  date?: string;
+}
+
+const DEFAULT_EVENTS_PARAMS = { page: 1, limit: 10 } as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Download Configuration Models (new)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type DownloadRuleValue = "dont_track" | "track_keep" | "track_remove";
+export type GracePeriodType = "immediate" | "delayed";
+export type GracePeriodMinutes = 15 | 30 | 60;
+
+export type FileCategory =
+  | "document"
+  | "video"
+  | "audio"
+  | "archive"
+  | "code"
+  | "image"
+  | "text"
+  | "executable"
+  | "other";
+
+export interface DomainRule {
+  _id: string;
+  domain: string;
+  rule: DownloadRuleValue;
+}
+
+export interface CategoryRule {
+  _id: string;
+  category: FileCategory;
+  rule: DownloadRuleValue;
+}
+
+export interface RoutingFolder {
+  _id: string;
+  folderName: string;
+  category: FileCategory | null;
+}
+
+export interface DownloadSettings {
+  trackingEnabled: boolean;
+  autoRemoveEnabled: boolean;
+  gracePeriodType: GracePeriodType;
+  gracePeriodMinutes: GracePeriodMinutes;
+  routingEnabled: boolean;
+  domainRules: DomainRule[];
+  categoryRules: CategoryRule[];
+  routingFolders: RoutingFolder[];
+}
+
+export interface UpdateDownloadSettingsInput {
+  trackingEnabled?: boolean;
+  autoRemoveEnabled?: boolean;
+  gracePeriodType?: GracePeriodType;
+  gracePeriodMinutes?: GracePeriodMinutes;
+  routingEnabled?: boolean;
+}
+
+export interface CreateDomainRuleInput {
+  domain: string;
+  rule: DownloadRuleValue;
+}
+
+export interface UpdateDomainRuleInput {
+  rule: DownloadRuleValue;
+}
+
+export interface UpsertCategoryRuleInput {
+  category: FileCategory;
+  rule: DownloadRuleValue;
+}
+
+export interface CreateRoutingFolderInput {
+  folderName: string;
+}
+
+export interface UpdateRoutingFolderInput {
+  folderName?: string;
+  category?: FileCategory | null;
+}
+
+// ─── API functions ───
+
+export async function getDownloadStats(): Promise<UserDownloadMetrics | null> {
+  const { data } = await api.get<
+    ApiResponse<{ metrics: UserDownloadMetrics | null }>
+  >(`${BASE}/stats`);
+  return data.data?.metrics ?? null;
+}
+
+export async function getDownloadTrend(
+  period: 7 | 15 | 30 = 7,
+): Promise<TrendBucket[]> {
+  const { data } = await api.get<ApiResponse<{ trend: TrendBucket[] }>>(
+    `${BASE}/trend`,
+    { params: { period } },
+  );
+  return data.data?.trend ?? [];
+}
+
+export async function getRecentEvents(): Promise<DownloadEvent[]> {
+  const { data } = await api.get<ApiResponse<{ events: DownloadEvent[] }>>(
+    `${BASE}/recent`,
+  );
+  return data.data?.events ?? [];
+}
+
+export async function getEvents(
+  params: EventsQueryParams = {},
+): Promise<EventsResponse> {
+  const { data } = await api.get<ApiResponse<EventsResponse>>(`${BASE}/events`, {
+    params: { ...DEFAULT_EVENTS_PARAMS, ...params },
+  });
+  return data.data ?? { events: [], total: 0 };
+}
+
+export async function getDuplicateGroups(): Promise<DuplicateGroup[]> {
+  const { data } = await api.get<ApiResponse<{ groups: DuplicateGroup[] }>>(
+    `${BASE}/duplicates`,
+  );
+  return data.data?.groups ?? [];
+}
+
+export async function getCategories(): Promise<CategoryStat[]> {
+  const { data } = await api.get<ApiResponse<{ categories: CategoryStat[] }>>(
+    `${BASE}/categories`,
+  );
+  return data.data?.categories ?? [];
+}
+
+export async function getDomains(): Promise<DomainStat[]> {
+  const { data } = await api.get<ApiResponse<{ domains: DomainStat[] }>>(
+    `${BASE}/domains`,
+  );
+  return data.data?.domains ?? [];
+}
+
+export async function getFileById(
+  fileId: string,
+): Promise<FileDetail | null> {
+  const { data } = await api.get<ApiResponse<{ file: FileDetail | null }>>(
+    `${BASE}/files/${fileId}`,
+  );
+  return data.data?.file ?? null;
+}
+
+export async function getFileTimeline(
+  fileId: string,
+): Promise<DownloadEvent[]> {
+  const { data } = await api.get<ApiResponse<{ events: DownloadEvent[] }>>(
+    `${BASE}/files/${fileId}/timeline`,
+  );
+  return data.data?.events ?? [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Download Configuration API (new)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getDownloadSettings(): Promise<DownloadSettings> {
+  const { data } = await api.get<ApiResponse<DownloadSettings>>(`${BASE}/settings`);
+  return data.data;
+}
+
+export async function updateDownloadSettings(
+  payload: UpdateDownloadSettingsInput,
+): Promise<DownloadSettings> {
+  const { data } = await api.patch<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function getDomainRules(): Promise<DomainRule[]> {
+  const { data } = await api.get<ApiResponse<{ domainRules: DomainRule[] }>>(
+    `${BASE}/settings/rules/domains`,
+  );
+  return data.data.domainRules ?? [];
+}
+
+export async function createDomainRule(
+  payload: CreateDomainRuleInput,
+): Promise<DownloadSettings> {
+  const { data } = await api.post<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings/rules/domains`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function updateDomainRule(
+  id: string,
+  payload: UpdateDomainRuleInput,
+): Promise<DownloadSettings> {
+  const { data } = await api.patch<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings/rules/domains/${id}`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function deleteDomainRule(id: string): Promise<DownloadSettings> {
+  const { data } = await api.delete<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings/rules/domains/${id}`,
+  );
+  return data.data;
+}
+
+export async function upsertCategoryRule(
+  payload: UpsertCategoryRuleInput,
+): Promise<DownloadSettings> {
+  const { data } = await api.post<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings/rules/categories`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function deleteCategoryRule(id: string): Promise<DownloadSettings> {
+  const { data } = await api.delete<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings/rules/categories/${id}`,
+  );
+  return data.data;
+}
+
+export async function getRoutingFolders(): Promise<RoutingFolder[]> {
+  const { data } = await api.get<ApiResponse<{ routingFolders: RoutingFolder[] }>>(
+    `${BASE}/settings/routing/folders`,
+  );
+  return data.data.routingFolders ?? [];
+}
+
+export async function createRoutingFolder(
+  payload: CreateRoutingFolderInput,
+): Promise<DownloadSettings> {
+  const { data } = await api.post<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings/routing/folders`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function updateRoutingFolder(
+  id: string,
+  payload: UpdateRoutingFolderInput,
+): Promise<DownloadSettings> {
+  const { data } = await api.patch<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings/routing/folders/${id}`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function deleteRoutingFolder(id: string): Promise<DownloadSettings> {
+  const { data } = await api.delete<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings/routing/folders/${id}`,
+  );
+  return data.data;
+}
+
+export async function cancelRemoval(hash: string): Promise<boolean> {
+  const { data } = await api.delete<ApiResponse<{ cancelled: boolean }>>(
+    `${BASE}/removal/${hash}`,
+  );
+  return data.data.cancelled;
+}

@@ -9,8 +9,12 @@ const BCRYPT_ROUNDS = 12;
 const JWT_TTL = "7d";
 const JWT_EXPIRES_SECONDS = 7 * 24 * 60 * 60;
 
-function buildToken(userId: string, email: string): string {
-  const payload: JwtPayload = { sub: userId, email };
+function buildToken(
+  userId: string,
+  email: string,
+  timezone?: string,
+): string {
+  const payload: JwtPayload = { sub: userId, email, timezone };
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: JWT_TTL });
 }
 
@@ -19,6 +23,7 @@ export const AuthService = {
     email: string,
     password: string,
     displayName: string,
+    timezone?: string,
   ): Promise<{ tokens: AuthTokens; userId: string }> {
     if (password.length < 8)
       throw new ValidationError("Password must be at least 8 characters");
@@ -30,9 +35,11 @@ export const AuthService = {
       email,
       passwordHash,
       displayName,
+      ...(timezone != null && timezone !== "" && { timezone }),
     });
     const userId = String(user._id);
-    const accessToken = buildToken(userId, email);
+    const tz = timezone ?? user.timezone ?? "UTC";
+    const accessToken = buildToken(userId, email, tz);
     return {
       tokens: { accessToken, expiresIn: JWT_EXPIRES_SECONDS },
       userId,
@@ -42,6 +49,7 @@ export const AuthService = {
   async login(
     email: string,
     password: string,
+    timezone?: string,
   ): Promise<{
     tokens: AuthTokens;
     userId: string;
@@ -54,7 +62,8 @@ export const AuthService = {
     if (!isValid) throw new AuthError("Invalid email or password");
 
     const userId = String(user._id);
-    const accessToken = buildToken(userId, user.email);
+    const tz = timezone ?? user.timezone ?? "UTC";
+    const accessToken = buildToken(userId, user.email, tz);
     return {
       tokens: { accessToken, expiresIn: JWT_EXPIRES_SECONDS },
       userId,

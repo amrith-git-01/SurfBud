@@ -1,14 +1,23 @@
+// api/src/repositories/download-event.repository.ts
 import { Types, type PipelineStage } from "mongoose";
 import {
   type IDownloadEvent,
   DownloadEvent,
 } from "../models/download-event.model";
 import { File } from "../models/file.model";
+import {
+  toDateString,
+  getMondayString,
+  getMonthStartString,
+  startOfDateInTimezone,
+} from "../utils/date.utils";
 
 export interface CreateDownloadEventDto {
   userId: string;
   fileId: string;
   filename: string;
+  hash?: string | null;
+  savedPath?: string;
   sourceDomain?: string;
   status: "new" | "duplicate";
   duration?: number;
@@ -19,7 +28,10 @@ export interface QueryOptions {
   limit: number;
   status?: "new" | "duplicate";
   category?: string;
+  domain?: string;
+  excludeDomains?: string[];
   search?: string;
+  date?: string;
   period?: "today" | "week" | "month" | "all";
 }
 
@@ -29,6 +41,7 @@ export interface PaginatedResult {
 }
 
 export interface DuplicateGroup {
+  fileId: string;
   filename: string;
   dupCount: number;
   totalSize: number;
@@ -41,32 +54,50 @@ export interface TrendBucket {
   duplicates: number;
 }
 
-function getStartOfToday(): Date {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
+export interface RemovalLookupInput {
+  userId: string;
+  hash: string;
+  savedPath?: string;
 }
 
-function getMondayOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getUTCDay();
-  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
-  d.setUTCDate(diff);
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
+export interface MarkRemovalScheduledInput extends RemovalLookupInput {
+  jobId: string;
+  scheduledAt: Date;
 }
 
-function getFirstOfMonth(date: Date): Date {
-  const d = new Date(date);
-  d.setUTCDate(1);
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
+export interface MarkRemovalFailedInput extends RemovalLookupInput {
+  reason?: string;
+}
+
+function getRemovalLookupFilter(input: RemovalLookupInput): {
+  userId: Types.ObjectId;
+  hash: string;
+  status: "duplicate";
+  savedPath?: string;
+} {
+  const filter: {
+    userId: Types.ObjectId;
+    hash: string;
+    status: "duplicate";
+    savedPath?: string;
+  } = {
+    userId: new Types.ObjectId(input.userId),
+    hash: input.hash,
+    status: "duplicate",
+  };
+
+  if (input.savedPath) {
+    filter.savedPath = input.savedPath;
+  }
+
+  return filter;
 }
 
 export const DownloadEventRepository = {
   async create(data: CreateDownloadEventDto): Promise<IDownloadEvent> {
     const doc = await DownloadEvent.create({
       ...data,
+      hash: data.hash ?? undefined,
       fileId: new Types.ObjectId(data.fileId),
       userId: new Types.ObjectId(data.userId),
     });
@@ -77,7 +108,7 @@ export const DownloadEventRepository = {
     return DownloadEvent.find({ userId: new Types.ObjectId(userId) })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("fileId", "fileCategory fileExtension mimeType")
+      .populate("fileId", "fileCategory fileExtension mimeType size")
       .lean()
       .exec() as Promise<IDownloadEvent[]>;
   },
@@ -85,6 +116,7 @@ export const DownloadEventRepository = {
   async findByUserId(
     userId: string,
     options: QueryOptions,
+    timezone: string = "UTC",
   ): Promise<PaginatedResult> {
     const match: Record<string, unknown> = {
       userId: new Types.ObjectId(userId),
@@ -92,19 +124,36 @@ export const DownloadEventRepository = {
 
     if (options.status) match.status = options.status;
     if (options.search) match.filename = new RegExp(options.search, "i");
+    if (options.domain) {
+      const escapedDomain = options.domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      match.sourceDomain = new RegExp(`^${escapedDomain}$`, "i");
+    } else if (options.excludeDomains && options.excludeDomains.length > 0) {
+      const excludedRegex = options.excludeDomains.map((domain) => {
+        const escapedDomain = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(`^${escapedDomain}$`, "i");
+      });
+      match.sourceDomain = { $nin: excludedRegex };
+    }
 
-    if (options.period && options.period !== "all") {
+    if (options.date) {
+      const dayStart = startOfDateInTimezone(options.date, timezone);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      match.createdAt = { $gte: dayStart, $lt: dayEnd };
+    } else if (options.period && options.period !== "all") {
       const now = new Date();
-      let start: Date;
-      if (options.period === "today") start = getStartOfToday();
-      else if (options.period === "week") start = getMondayOfWeek(now);
-      else start = getFirstOfMonth(now);
-      match.createdAt = { $gte: start };
+      const boundaries = {
+        today: startOfDateInTimezone(toDateString(now, timezone), timezone),
+        week: startOfDateInTimezone(getMondayString(now, timezone), timezone),
+        month: startOfDateInTimezone(
+          getMonthStartString(now, timezone),
+          timezone,
+        ),
+      };
+      match.createdAt = { $gte: boundaries[options.period] };
     }
 
     const skip = (options.page - 1) * options.limit;
-
-    let pipeline: Record<string, unknown>[] = [{ $match: match }];
+    const pipeline: Record<string, unknown>[] = [{ $match: match }];
 
     if (options.category) {
       pipeline.push({
@@ -130,18 +179,18 @@ export const DownloadEventRepository = {
 
     const countMatch = options.category
       ? await DownloadEvent.aggregate([
-          { $match: match },
-          {
-            $lookup: {
-              from: "files",
-              localField: "fileId",
-              foreignField: "_id",
-              as: "fileDoc",
-            },
+        { $match: match },
+        {
+          $lookup: {
+            from: "files",
+            localField: "fileId",
+            foreignField: "_id",
+            as: "fileDoc",
           },
-          { $match: { "fileDoc.fileCategory": options.category } },
-          { $count: "total" },
-        ] as unknown as PipelineStage[]).exec()
+        },
+        { $match: { "fileDoc.fileCategory": options.category } },
+        { $count: "total" },
+      ] as unknown as PipelineStage[]).exec()
       : null;
 
     const total = options.category
@@ -150,7 +199,7 @@ export const DownloadEventRepository = {
 
     const fileIds = events.map((e) => e.fileId).filter(Boolean);
     const files = await File.find({ _id: { $in: fileIds } })
-      .select("fileCategory fileExtension mimeType")
+      .select("fileCategory fileExtension mimeType size")
       .lean()
       .exec();
     const fileMap = new Map(files.map((f) => [String(f._id), f]));
@@ -180,51 +229,196 @@ export const DownloadEventRepository = {
     eventId: string,
     userId: string,
   ): Promise<IDownloadEvent | null> {
+    const now = new Date();
     const doc = await DownloadEvent.findOneAndUpdate(
       { _id: eventId, userId: new Types.ObjectId(userId) },
-      { isRemoved: true, removedAt: new Date() },
-      { new: true },
+      {
+        isRemoved: true,
+        removedAt: now,
+        removalStatus: "removed",
+        removalConfirmedAt: now,
+      },
+      { returnDocument: "after" },
     )
       .lean()
       .exec();
+
     return doc as IDownloadEvent | null;
+  },
+
+  async markRemovalScheduled(
+    input: MarkRemovalScheduledInput,
+  ): Promise<IDownloadEvent | null> {
+    const doc = await DownloadEvent.findOneAndUpdate(
+      getRemovalLookupFilter(input),
+      {
+        $set: {
+          removalStatus: "scheduled",
+          removalJobId: input.jobId,
+          removalScheduledAt: input.scheduledAt,
+        },
+      },
+      { returnDocument: "after", sort: { createdAt: -1 } },
+    )
+      .lean()
+      .exec();
+
+    return doc as IDownloadEvent | null;
+  },
+
+  async markRemovalPending(
+    input: RemovalLookupInput,
+  ): Promise<IDownloadEvent | null> {
+    const now = new Date();
+    const doc = await DownloadEvent.findOneAndUpdate(
+      getRemovalLookupFilter(input),
+      {
+        $set: {
+          removalStatus: "pending_extension",
+          removalRequestedAt: now,
+        },
+      },
+      { returnDocument: "after", sort: { createdAt: -1 } },
+    )
+      .lean()
+      .exec();
+
+    return doc as IDownloadEvent | null;
+  },
+
+  async markRemovalConfirmed(
+    input: RemovalLookupInput,
+  ): Promise<IDownloadEvent | null> {
+    const now = new Date();
+    const doc = await DownloadEvent.findOneAndUpdate(
+      getRemovalLookupFilter(input),
+      {
+        $set: {
+          isRemoved: true,
+          removedAt: now,
+          removalStatus: "removed",
+          removalConfirmedAt: now,
+        },
+      },
+      { returnDocument: "after", sort: { createdAt: -1 } },
+    )
+      .lean()
+      .exec();
+
+    return doc as IDownloadEvent | null;
+  },
+
+  async markRemovalFailed(
+    input: MarkRemovalFailedInput,
+  ): Promise<IDownloadEvent | null> {
+    const now = new Date();
+    const doc = await DownloadEvent.findOneAndUpdate(
+      getRemovalLookupFilter(input),
+      {
+        $set: {
+          removalStatus: "failed",
+          removalFailedAt: now,
+          removalFailureReason: input.reason ?? "UNKNOWN_FAILURE",
+        },
+      },
+      { returnDocument: "after", sort: { createdAt: -1 } },
+    )
+      .lean()
+      .exec();
+
+    return doc as IDownloadEvent | null;
+  },
+
+  async markRemovalCancelled(
+    input: RemovalLookupInput,
+  ): Promise<IDownloadEvent | null> {
+    const now = new Date();
+    const doc = await DownloadEvent.findOneAndUpdate(
+      getRemovalLookupFilter(input),
+      {
+        $set: {
+          removalStatus: "cancelled",
+          keptAt: now,
+        },
+        $unset: {
+          removalJobId: "",
+          removalScheduledAt: "",
+        },
+      },
+      { returnDocument: "after", sort: { createdAt: -1 } },
+    )
+      .lean()
+      .exec();
+
+    return doc as IDownloadEvent | null;
+  },
+
+  async markAllScheduledOrPendingAsCancelled(userId: string): Promise<number> {
+    const result = await DownloadEvent.updateMany(
+      {
+        userId: new Types.ObjectId(userId),
+        removalStatus: { $in: ["scheduled", "pending_extension"] },
+      },
+      {
+        $set: {
+          removalStatus: "cancelled",
+          keptAt: new Date(),
+        },
+        $unset: {
+          removalJobId: "",
+          removalScheduledAt: "",
+        },
+      },
+    ).exec();
+
+    return result.modifiedCount;
   },
 
   async getDuplicateGroups(userId: string): Promise<DuplicateGroup[]> {
     const results = await DownloadEvent.aggregate<{
-      _id: string;
+      _id: Types.ObjectId;
       dupCount: number;
-      fileId: Types.ObjectId;
     }>([
       { $match: { userId: new Types.ObjectId(userId), status: "duplicate" } },
       {
         $group: {
-          _id: "$filename",
+          _id: "$fileId",
           dupCount: { $sum: 1 },
-          fileId: { $first: "$fileId" },
         },
       },
       { $sort: { dupCount: -1 } },
       { $limit: 20 },
     ]).exec();
 
-    const fileIds = results.map((r) => r.fileId).filter(Boolean);
+    const fileIds = results.map((r) => r._id).filter(Boolean);
+
     const files = await File.find({ _id: { $in: fileIds } })
-      .select("size")
+      .select("filename size")
       .lean()
       .exec();
-    const sizeMap = new Map(files.map((f) => [String(f._id), f.size ?? 0]));
 
-    return results.map((r) => ({
-      filename: r._id,
-      dupCount: r.dupCount,
-      totalSize: (sizeMap.get(String(r.fileId)) ?? 0) * r.dupCount,
-    }));
+    const fileMap = new Map(
+      files.map((f) => [
+        String(f._id),
+        { filename: f.filename, size: f.size ?? 0 },
+      ]),
+    );
+
+    return results.map((r) => {
+      const file = fileMap.get(String(r._id));
+
+      return {
+        fileId: String(r._id),
+        filename: file?.filename ?? "Unknown file",
+        dupCount: r.dupCount,
+        totalSize: (file?.size ?? 0) * r.dupCount,
+      };
+    });
   },
 
   async getTrend(userId: string, days: number): Promise<TrendBucket[]> {
     const startDate = new Date();
-    startDate.setUTCDate(startDate.getUTCDate() - days);
+    startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
     startDate.setUTCHours(0, 0, 0, 0);
 
     const raw = await DownloadEvent.aggregate<{
@@ -269,6 +463,7 @@ export const DownloadEventRepository = {
         duplicates: found?.duplicates ?? 0,
       });
     }
+
     return filled;
   },
 };
