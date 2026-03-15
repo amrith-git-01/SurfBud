@@ -4,6 +4,7 @@ import { UserRepository } from "../repositories/user.repository";
 import { asyncHandler } from "../utils/asyncHandler";
 import { redis } from "../config/redis";
 import { logger } from "../utils/logger";
+import { DownloadSettingsService } from "../services/download-settings.service";
 
 export const AuthController = {
   register: asyncHandler(async (req: Request, res: Response) => {
@@ -13,16 +14,19 @@ export const AuthController = {
       displayName: string;
       timezone?: string;
     };
+
     const result = await AuthService.register(
       email,
       password,
       displayName,
       timezone,
     );
+
     if (timezone) {
       UserRepository.updateTimezone(result.userId, timezone).catch((err) =>
         logger.warn({ userId: result.userId, err }, "timezone update failed"),
       );
+
       redis
         .get("active:timezones")
         .then((raw) => {
@@ -33,14 +37,18 @@ export const AuthController = {
           }
           return undefined;
         })
-        .catch(() => {});
+        .catch(() => { });
     }
+
+    const settings = await DownloadSettingsService.getSettings(result.userId);
+
     res.status(201).json({
       success: true,
       data: {
         accessToken: result.tokens.accessToken,
         userId: result.userId,
         displayName,
+        settings,
       },
     });
   }),
@@ -51,7 +59,9 @@ export const AuthController = {
       password: string;
       timezone?: string;
     };
+
     const result = await AuthService.login(email, password, timezone);
+
     if (timezone) {
       UserRepository.updateTimezone(result.userId, timezone).catch((err) =>
         logger.warn(
@@ -59,6 +69,7 @@ export const AuthController = {
           "timezone update failed",
         ),
       );
+
       redis
         .get("active:timezones")
         .then((raw) => {
@@ -69,14 +80,18 @@ export const AuthController = {
           }
           return undefined;
         })
-        .catch(() => {});
+        .catch(() => { });
     }
+
+    const settings = await DownloadSettingsService.getSettings(result.userId);
+
     res.status(200).json({
       success: true,
       data: {
         accessToken: result.tokens.accessToken,
         userId: result.userId,
         displayName: result.displayName,
+        settings,
       },
     });
   }),
