@@ -1,3 +1,4 @@
+// api/src/index.ts
 import express from "express";
 import { createServer } from "http";
 import cors from "cors";
@@ -14,6 +15,7 @@ import { logger } from "./utils/logger";
 import { socketManager } from "./websocket/socket.manager";
 
 import "./jobs/workers/metrics-rollup.worker";
+import "./jobs/workers/removal.worker";
 
 const app = express();
 const httpServer = createServer(app);
@@ -71,7 +73,6 @@ async function bootstrap(): Promise<void> {
   await connectDB();
   await startScheduler();
 
-  // Initialize Socket.IO
   socketManager.initialize(httpServer);
 
   httpServer.listen(env.PORT, () =>
