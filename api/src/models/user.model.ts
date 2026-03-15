@@ -5,6 +5,7 @@ export interface IUser extends Document {
   email: string;
   passwordHash: string;
   displayName: string;
+  timezone?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,6 +21,7 @@ const UserSchema = new Schema<IUser>(
     },
     passwordHash: { type: String, required: true },
     displayName: { type: String, required: true, trim: true },
+    timezone: { type: String, default: "UTC" },
   },
   { timestamps: true },
 );

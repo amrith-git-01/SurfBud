@@ -21,7 +21,6 @@ const fileSchema = new Schema<IFile>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     hash: { type: String, required: true },
     filename: { type: String, required: true },
