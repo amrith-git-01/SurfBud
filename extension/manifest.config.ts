@@ -17,13 +17,15 @@ export default defineManifest({
     "http://localhost:3001/*",
     "http://localhost:5173/*",
     "<all_urls>",
+    "file:///*",
   ],
 
   content_scripts: [
     {
       js: ["src/content/dashboardBridge.ts"],
       matches: [
-        "http://localhost:5173/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*",
         "https://*.surfbud.com/*",
         "https://surfbud.com/*",
       ],

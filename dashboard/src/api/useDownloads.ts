@@ -19,8 +19,6 @@ import {
   createDomainRule,
   updateDomainRule,
   deleteDomainRule,
-  upsertCategoryRule,
-  deleteCategoryRule,
   createRoutingFolder,
   updateRoutingFolder,
   deleteRoutingFolder,
@@ -29,7 +27,6 @@ import {
   type UpdateDownloadSettingsInput,
   type CreateDomainRuleInput,
   type UpdateDomainRuleInput,
-  type UpsertCategoryRuleInput,
   type CreateRoutingFolderInput,
   type UpdateRoutingFolderInput,
 } from "./downloads.api";
@@ -254,28 +251,6 @@ export function useDeleteDomainRule() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteDomainRule(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: downloadKeys.settings() });
-    },
-  });
-}
-
-/** Category rules — upsert (create or replace) a rule for a category */
-export function useUpsertCategoryRule() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: UpsertCategoryRuleInput) => upsertCategoryRule(payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: downloadKeys.settings() });
-    },
-  });
-}
-
-/** Category rules — remove a rule */
-export function useDeleteCategoryRule() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => deleteCategoryRule(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: downloadKeys.settings() });
     },

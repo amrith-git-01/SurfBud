@@ -17,7 +17,7 @@ import type { FileCategory } from "../utils/file-utils";
 const DEFAULT_DOWNLOAD_SETTINGS = {
   trackingEnabled: true,
   autoRemoveEnabled: false,
-  gracePeriodType: "delayed" as GracePeriodType,
+  gracePeriodType: "immediate" as GracePeriodType,
   gracePeriodMinutes: 15 as GracePeriodMinutes,
   routingEnabled: false,
 };
@@ -33,11 +33,6 @@ export interface DownloadSettingsResponse {
   domainRules: Array<{
     _id: string;
     domain: string;
-    rule: DownloadRuleValue;
-  }>;
-  categoryRules: Array<{
-    _id: string;
-    category: FileCategory;
     rule: DownloadRuleValue;
   }>;
   routingFolders: Array<{
@@ -64,11 +59,6 @@ export interface UpdateDomainRuleInput {
   rule: DownloadRuleValue;
 }
 
-export interface UpsertCategoryRuleInput {
-  category: FileCategory;
-  rule: DownloadRuleValue;
-}
-
 export interface CreateRoutingFolderInput {
   folderName: string;
 }
@@ -80,7 +70,6 @@ export interface UpdateRoutingFolderInput {
 
 export interface RemovalDecisionInput {
   sourceDomain?: string;
-  category?: FileCategory;
 }
 
 export interface RemovalDecision {
@@ -180,14 +169,6 @@ export const DownloadSettingsService = {
         rule: normalizeDownloadRuleValue(rule.rule),
       }));
 
-    const categoryRules = rules
-      .filter((rule) => rule.ruleType === "category" && rule.category)
-      .map((rule) => ({
-        _id: String(rule._id),
-        category: rule.category as FileCategory,
-        rule: normalizeDownloadRuleValue(rule.rule),
-      }));
-
     const routingFolders = folders.map((folder) => ({
       _id: String(folder._id),
       folderName: folder.folderName,
@@ -201,7 +182,6 @@ export const DownloadSettingsService = {
       gracePeriodMinutes: scalarSettings.gracePeriodMinutes,
       routingEnabled: scalarSettings.routingEnabled,
       domainRules,
-      categoryRules,
       routingFolders,
     };
   },
@@ -289,34 +269,6 @@ export const DownloadSettingsService = {
 
     if (!existing || existing.ruleType !== "domain") {
       throw new NotFoundError("Domain rule not found");
-    }
-
-    await DownloadRuleRepository.deleteById(userId, id);
-
-    return this.getSettings(userId);
-  },
-
-  async upsertCategoryRule(
-    userId: string,
-    input: UpsertCategoryRuleInput,
-  ): Promise<DownloadSettingsResponse> {
-    await DownloadRuleRepository.upsertCategoryRule({
-      userId,
-      category: input.category,
-      rule: input.rule,
-    });
-
-    return this.getSettings(userId);
-  },
-
-  async deleteCategoryRule(
-    userId: string,
-    id: string,
-  ): Promise<DownloadSettingsResponse> {
-    const existing = await DownloadRuleRepository.findById(userId, id);
-
-    if (!existing || existing.ruleType !== "category") {
-      throw new NotFoundError("Category rule not found");
     }
 
     await DownloadRuleRepository.deleteById(userId, id);
@@ -444,27 +396,6 @@ export const DownloadSettingsService = {
     }
 
     if (domainRule && normalizeDownloadRuleValue(domainRule.rule) === "track_keep") {
-      return {
-        shouldAutoRemove: false,
-        gracePeriodType: settings.gracePeriodType,
-        gracePeriodMinutes: settings.gracePeriodMinutes,
-      };
-    }
-
-    // Priority 3: category rules
-    const categoryRule = input.category
-      ? await DownloadRuleRepository.findCategoryRuleByCategory(userId, input.category)
-      : null;
-
-    if (categoryRule?.rule === "dont_track") {
-      return {
-        shouldAutoRemove: false,
-        gracePeriodType: settings.gracePeriodType,
-        gracePeriodMinutes: settings.gracePeriodMinutes,
-      };
-    }
-
-    if (categoryRule && normalizeDownloadRuleValue(categoryRule.rule) === "track_keep") {
       return {
         shouldAutoRemove: false,
         gracePeriodType: settings.gracePeriodType,

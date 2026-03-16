@@ -91,24 +91,6 @@ export const DownloadController = {
     res.json({ success: true, data: settings });
   }),
 
-  setCategoryRule: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const settings = await DownloadSettingsService.upsertCategoryRule(
-      userId,
-      req.body,
-    );
-    res.json({ success: true, data: settings });
-  }),
-
-  deleteCategoryRule: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const settings = await DownloadSettingsService.deleteCategoryRule(
-      userId,
-      req.params.id as string,
-    );
-    res.json({ success: true, data: settings });
-  }),
-
   getRoutingFolders: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const routingFolders =
@@ -174,6 +156,10 @@ export const DownloadController = {
         page: Number(q.page ?? 1),
         limit: Number(q.limit ?? 10),
         status: q.status as "new" | "duplicate" | undefined,
+        isRemoved:
+          typeof q.isRemoved === "boolean"
+            ? (q.isRemoved as boolean)
+            : undefined,
         category: q.category as string | undefined,
         domain: q.domain as string | undefined,
         excludeDomains: q.excludeDomains as string[] | undefined,

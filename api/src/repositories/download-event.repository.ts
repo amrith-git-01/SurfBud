@@ -27,6 +27,7 @@ export interface QueryOptions {
   page: number;
   limit: number;
   status?: "new" | "duplicate";
+  isRemoved?: boolean;
   category?: string;
   domain?: string;
   excludeDomains?: string[];
@@ -123,6 +124,7 @@ export const DownloadEventRepository = {
     };
 
     if (options.status) match.status = options.status;
+    if (options.isRemoved !== undefined) match.isRemoved = options.isRemoved;
     if (options.search) match.filename = new RegExp(options.search, "i");
     if (options.domain) {
       const escapedDomain = options.domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -225,13 +227,46 @@ export const DownloadEventRepository = {
       .exec() as Promise<IDownloadEvent[]>;
   },
 
+  async findLatestSavedPathByFileId(
+    fileId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const event = await DownloadEvent.findOne({
+      fileId: new Types.ObjectId(fileId),
+      userId: new Types.ObjectId(userId),
+      savedPath: { $exists: true, $ne: "" },
+    })
+      .sort({ createdAt: -1 })
+      .select("savedPath")
+      .lean()
+      .exec();
+
+    return event?.savedPath ?? null;
+  },
+
+  async findById(
+    eventId: string,
+    userId: string,
+  ): Promise<IDownloadEvent | null> {
+    return DownloadEvent.findOne({
+      _id: new Types.ObjectId(eventId),
+      userId: new Types.ObjectId(userId),
+    })
+      .lean()
+      .exec() as Promise<IDownloadEvent | null>;
+  },
+
   async markRemoved(
     eventId: string,
     userId: string,
   ): Promise<IDownloadEvent | null> {
     const now = new Date();
     const doc = await DownloadEvent.findOneAndUpdate(
-      { _id: eventId, userId: new Types.ObjectId(userId) },
+      {
+        _id: new Types.ObjectId(eventId),
+        userId: new Types.ObjectId(userId),
+        isRemoved: false,
+      },
       {
         isRemoved: true,
         removedAt: now,
@@ -291,7 +326,10 @@ export const DownloadEventRepository = {
   ): Promise<IDownloadEvent | null> {
     const now = new Date();
     const doc = await DownloadEvent.findOneAndUpdate(
-      getRemovalLookupFilter(input),
+      {
+        ...getRemovalLookupFilter(input),
+        isRemoved: false,
+      },
       {
         $set: {
           isRemoved: true,
@@ -306,6 +344,44 @@ export const DownloadEventRepository = {
       .exec();
 
     return doc as IDownloadEvent | null;
+  },
+
+  async getActiveDuplicateSize(userId: string): Promise<number> {
+    const result = await DownloadEvent.aggregate<{ totalSize?: number }>([
+      {
+        $match: {
+          userId: new Types.ObjectId(userId),
+          status: "duplicate",
+          isRemoved: false,
+        },
+      },
+      {
+        $lookup: {
+          from: "files",
+          localField: "fileId",
+          foreignField: "_id",
+          as: "fileDoc",
+        },
+      },
+      {
+        $unwind: {
+          path: "$fileDoc",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSize: {
+            $sum: {
+              $ifNull: ["$fileDoc.size", 0],
+            },
+          },
+        },
+      },
+    ]).exec();
+
+    return result[0]?.totalSize ?? 0;
   },
 
   async markRemovalFailed(

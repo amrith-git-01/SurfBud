@@ -37,4 +37,22 @@ export const FileRepository = {
       .lean()
       .exec();
   },
+
+  async setSavedPathIfMissing(
+    userId: string,
+    fileId: string,
+    savedPath: string,
+  ): Promise<IFile | null> {
+    return File.findOneAndUpdate(
+      {
+        _id: new Types.ObjectId(fileId),
+        userId: new Types.ObjectId(userId),
+        $or: [{ savedPath: { $exists: false } }, { savedPath: "" }, { savedPath: null }],
+      },
+      { $set: { savedPath } },
+      { returnDocument: "after" },
+    )
+      .lean()
+      .exec();
+  },
 };

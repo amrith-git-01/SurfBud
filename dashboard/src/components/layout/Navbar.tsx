@@ -22,7 +22,9 @@ export function Navbar({ onLogout }: NavbarProps) {
         {/* Left side — nav links */}
         <div className="flex items-center gap-1 -ml-4">
           {navItems.map((item) => {
-            const isActive = pathname === item.path || (item.path === "/dashboard" && pathname === "/");
+            const isActive = pathname === item.path
+              || (item.path === "/dashboard" && pathname === "/")
+              || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/"));
             return (
               <Link
                 key={item.id}

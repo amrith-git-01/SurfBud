@@ -70,11 +70,13 @@ export function MasterToggles({
   if (isLoading) {
     return (
       <section>
-        <p className="section-label">MASTER TOGGLES</p>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Control core tracking and duplicate-removal behavior.
-        </p>
-        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-gray-900">Master Toggles</h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Control core tracking and duplicate-removal behavior.
+          </p>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {[0, 1].map((i) => (
             <div key={i} className="card-metric-glass p-5">
               <div className="flex items-start justify-between gap-3">
@@ -93,12 +95,14 @@ export function MasterToggles({
 
   return (
     <section className={isDisabled ? 'pointer-events-none' : ''}>
-      <p className="section-label">MASTER TOGGLES</p>
-      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-        Control core tracking and duplicate-removal behavior.
-      </p>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-900">Master Toggles</h3>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          Control core tracking and duplicate-removal behavior.
+        </p>
+      </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ToggleCard
           label="Download Tracking"
           description="Track and record all downloaded files"

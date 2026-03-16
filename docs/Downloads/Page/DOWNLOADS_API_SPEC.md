@@ -13,11 +13,15 @@
 ```
 PRE-COMPUTED (updated synchronously on every POST /api/downloads):
   UserDownloadMetrics  → todayCount, weekCount, monthCount
+                         prevTodayCount, prevWeekCount, prevMonthCount (delta for cards)
                          totalNew, totalDuplicates
                          totalSize, duplicateSize
-                         categories[]  (predetermined list, safe to pre-compute)
+                         (no categories — see CategoryStats)
+  CategoryStats        → separate collection, one doc per userId+category
+                         tracks totalCount, newCount, dupCount, totalSize, newSize, dupSize
+                         uses FILE_CATEGORIES from file-utils (document, image, text, etc.)
   DomainStats          → separate collection, one doc per userId+domain
-                         tracks total, newCount, dupCount, size per domain
+                         tracks totalCount, newCount, dupCount, totalSize, newSize, dupSize
 
 ON-DEMAND (live aggregation at request time):
   Trend chart          → GROUP BY date on DownloadEvent, last 7/15/30 days
@@ -75,7 +79,7 @@ Fields:
   savedPath      string                optional
   size           number                optional   (bytes)
   fileExtension  string                optional   e.g. ".pdf"
-  fileCategory   string                optional   e.g. "PDF"
+  fileCategory   string                optional   from FILE_CATEGORIES (document, image, text, code, executable, archive, audio, video, other)
   mimeType       string                optional
   sourceDomain   string                optional   (domain of first download)
   createdAt      Date                  auto       = firstDownloadedAt
@@ -122,10 +126,13 @@ Fields:
   // Time-windowed counts (reset triggers on date change)
   todayCount      number     default 0
   todayDate       string     'YYYY-MM-DD'   ← reset trigger for todayCount
+  prevTodayCount  number     default 0      ← yesterday's final count, snapshotted at reset
   weekCount       number     default 0
   weekStart       string     'YYYY-MM-DD'   ← reset trigger (Monday of current week)
+  prevWeekCount   number     default 0      ← last week's final count, snapshotted at reset
   monthCount      number     default 0
   monthStart      string     'YYYY-MM-DD'   ← reset trigger (1st of current month)
+  prevMonthCount  number     default 0      ← last month's final count, snapshotted at reset
 
   // All-time totals
   totalNew        number     default 0
@@ -133,21 +140,14 @@ Fields:
   totalSize       number     default 0      (bytes — unique files only)
   duplicateSize   number     default 0      (bytes — wasted on duplicates)
 
-  // File category breakdown (predetermined list, pre-computed)
-  categories: [{
-    name    string   'PDF' | 'Word' | 'Spreadsheet' | 'Presentation' | 'Image'
-                     | 'Video' | 'Audio' | 'Archive' | 'Code' | 'Other'
-    count   number
-    size    number   (bytes)
-  }]
-
   updatedAt   Date   auto
 
 Indexes:
   { userId: 1 }  unique
 
-NOTE: domains[] removed from this model — replaced by DomainStats collection
-NOTE: trend[] removed from this model — trend is computed on-demand
+NOTE: categories[] removed — replaced by CategoryStats collection
+NOTE: domains[] removed — replaced by DomainStats collection
+NOTE: trend[] removed — trend is computed on-demand
 ```
 
 ### DomainStats — `src/models/domain-stats.model.ts`
@@ -164,7 +164,7 @@ WHY separate collection instead of embedded array:
 Fields:
   userId     ObjectId  ref: User   required
   domain     string               required
-  total      number    default 0  (all downloads from this domain)
+  totalCount number    default 0  (all downloads from this domain)
   newCount   number    default 0  (new files from this domain)
   dupCount   number    default 0  (duplicate downloads from this domain)
   newSize    number    default 0  (bytes — size of new files from this domain)
@@ -175,7 +175,35 @@ Fields:
 
 Indexes:
   { userId: 1, domain: 1 }  unique   ← core lookup index
-  { userId: 1, total: -1 }           ← sorted domain list queries
+  { userId: 1, totalCount: -1 }     ← sorted domain list queries
+```
+
+### CategoryStats — `src/models/category-stats.model.ts`
+```
+One document per userId + category combination.
+Updated synchronously on every download. Replaces categories[] array in UserDownloadMetrics.
+
+WHY separate collection instead of embedded array:
+  - Categories use FILE_CATEGORIES from file-utils (document, image, text, code, executable, archive, audio, video, other)
+  - Separate documents allow atomic $inc per category without rewriting full array
+  - Scales cleanly as category count grows
+  - Same pattern as DomainStats
+
+Fields:
+  userId     ObjectId  ref: User   required
+  category   string    enum        required   (FILE_CATEGORIES from file-utils)
+  totalCount number    default 0
+  newCount   number    default 0
+  dupCount   number    default 0
+  totalSize  number    default 0
+  newSize    number    default 0
+  dupSize    number    default 0
+  createdAt  Date      auto
+  updatedAt  Date      auto
+
+Indexes:
+  { userId: 1, category: 1 }  unique   ← core lookup index
+  { userId: 1, totalCount: -1 }         ← sorted category list queries
 ```
 
 ---
@@ -231,11 +259,13 @@ findByUserId(userId: string, options: QueryOptions): Promise<PaginatedResult>
   → .lean() · skip/limit · countDocuments
   → populate fileId: select 'fileCategory fileExtension mimeType'
 
-  period logic:
-    'today' → createdAt >= start of today (midnight UTC)
-    'week'  → createdAt >= Monday of current week (midnight UTC)
-    'month' → createdAt >= 1st of current month (midnight UTC)
+  period logic (computed in user's local timezone, not UTC):
+    'today' → createdAt >= new Date(toDateString(now, tz) + 'T00:00:00')
+    'week'  → createdAt >= new Date(getMondayString(now, tz) + 'T00:00:00')
+    'month' → createdAt >= new Date(getMonthStartString(now, tz) + 'T00:00:00')
     'all'   → no date filter
+
+    tz is passed from controller via req.user.timezone ?? 'UTC'
 
 findByFileId(fileId: string, userId: string): Promise<IDownloadEvent[]>
   → DownloadEvent.find({ fileId, userId })
@@ -320,7 +350,7 @@ upsert(userId: string, update: object): Promise<void>
 ```typescript
 findByUserId(userId: string, limit?: number): Promise<IDomainStats[]>
   → DomainStats.find({ userId })
-     .sort({ total: -1 })
+     .sort({ totalCount: -1 })
      .limit(limit ?? 50)
      .lean()
 
@@ -334,7 +364,7 @@ upsertOnDownload(
       { userId, domain },
       {
         $inc: {
-          total:     1,
+          totalCount: 1,
           newCount:  status === 'new'       ? 1 : 0,
           dupCount:  status === 'duplicate' ? 1 : 0,
           newSize:   status === 'new'       ? (size ?? 0) : 0,
@@ -360,37 +390,38 @@ updateOnDownload(
   status: 'new' | 'duplicate'
 ): Promise<void>
 
-Step 1 — Compute period strings
-  today      = toDateString(new Date())        // 'YYYY-MM-DD'
-  weekStart  = getMondayString(new Date())     // 'YYYY-MM-DD' of this Monday
-  monthStart = getMonthStartString(new Date()) // 'YYYY-MM-DD' of 1st
+Step 1 — Fetch user timezone + compute period strings in user-local time
+  user       = await UserRepository.findById(userId)
+  tz         = user?.timezone ?? 'UTC'             // IANA name e.g. 'Asia/Kolkata'
+  today      = toDateString(new Date(), tz)        // 'YYYY-MM-DD' in user's local date
+  weekStart  = getMondayString(new Date(), tz)     // Monday of this week in user's tz
+  monthStart = getMonthStartString(new Date(), tz) // 1st of this month in user's tz
 
 Step 2 — Fetch existing metrics
   existing = await DownloadMetricsRepository.findByUserId(userId)
 
-Step 3 — Build categories array update
-  Find bucket where name === file.fileCategory (default: 'Other')
-  If found:  increment count, add file.size
-  If not:    push new bucket { name, count: 1, size: file.size }
-
-Step 4 — Handle period resets
+Step 3 — Handle period resets + snapshot outgoing counts
   resetToday  = existing?.todayDate  !== today
   resetWeek   = existing?.weekStart  !== weekStart
   resetMonth  = existing?.monthStart !== monthStart
 
-Step 5 — Call DownloadMetricsRepository.upsert with update object:
+  When a period resets, existing.todayCount IS yesterday's total — snapshot it.
+  prevXxxCount fields are ONLY written at reset. Between resets they stay unchanged.
+
+Step 4 — Call DownloadMetricsRepository.upsert with update object:
   {
     $set: {
       todayDate,
       weekStart,
       monthStart,
-      categories: updatedCategories,
       updatedAt:  new Date(),
-      ...(resetToday  ? { todayCount: 1 }  : {}),
-      ...(resetWeek   ? { weekCount: 1 }   : {}),
-      ...(resetMonth  ? { monthCount: 1 }  : {}),
+      // On reset: start count at 1 AND snapshot outgoing count into prev field
+      ...(resetToday  ? { todayCount: 1,  prevTodayCount:  existing?.todayCount  ?? 0 } : {}),
+      ...(resetWeek   ? { weekCount: 1,   prevWeekCount:   existing?.weekCount   ?? 0 } : {}),
+      ...(resetMonth  ? { monthCount: 1,  prevMonthCount:  existing?.monthCount  ?? 0 } : {}),
     },
     $inc: {
+      // Only increment if NOT resetting (reset already set the value to 1 above)
       ...(resetToday  ? {} : { todayCount: 1 }),
       ...(resetWeek   ? {} : { weekCount: 1 }),
       ...(resetMonth  ? {} : { monthCount: 1 }),
@@ -401,7 +432,7 @@ Step 5 — Call DownloadMetricsRepository.upsert with update object:
     }
   }
 
-Step 6 — Update DomainStats atomically
+Step 5 — Update DomainStats atomically
   await DomainStatsRepository.upsertOnDownload(
     userId,
     file.sourceDomain ?? 'unknown',
@@ -409,15 +440,34 @@ Step 6 — Update DomainStats atomically
     file.size ?? 0
   )
 
-Helper functions (private):
-  toDateString(date: Date): string
-    → date.toISOString().split('T')[0]
+Step 6 — Update CategoryStats atomically
+  await CategoryStatsRepository.upsertOnDownload(
+    userId,
+    file.fileCategory ?? 'other',
+    status,
+    file.size ?? 0
+  )
 
-  getMondayString(date: Date): string
-    → find Monday of the week containing date → toDateString
+Helper functions — src/utils/date.utils.ts (shared across service + cron worker):
 
-  getMonthStartString(date: Date): string
-    → `${date.getFullYear()}-${pad(date.getMonth()+1)}-01`
+  toDateString(date: Date, timezone: string = 'UTC'): string
+    → Intl.DateTimeFormat('en-CA', { timeZone: timezone, year, month, day }).format(date)
+    → en-CA locale produces YYYY-MM-DD natively — no string parsing needed
+
+  getMondayString(date: Date, timezone: string = 'UTC'): string
+    → get local date string via toDateString, parse to local Date, walk back to Monday
+    → returns YYYY-MM-DD of Monday in user's timezone
+
+  getMonthStartString(date: Date, timezone: string = 'UTC'): string
+    → get local date string via toDateString, replace day with '01'
+    → returns YYYY-MM-DD of 1st of month in user's timezone
+
+  getTimezonesAtMidnight(windowMinutes: number = 30): string[]
+    → reads active:timezones from Redis (cached distinct user timezones)
+    → filters to only zones where local hour === 0 and minute <= windowMinutes
+    → uses formatToParts — no locale-dependent string parsing
+    → returns only timezones currently within windowMinutes after their midnight
+    → ONLY after midnight (h === 0) — never resets before day is over
 ```
 
 ### DownloadService — `src/services/download.service.ts`
@@ -557,9 +607,9 @@ getDuplicateGroups(req, res, next)
   return res.json({ success: true, data: { groups } })
 
 getCategories(req, res, next)
-  // Reads pre-computed categories from UserDownloadMetrics
-  metrics = await DownloadMetricsRepository.findByUserId(req.user.id)
-  return res.json({ success: true, data: { categories: metrics?.categories ?? [] } })
+  // Reads pre-computed categories from CategoryStats collection
+  categories = await CategoryStatsRepository.findByUserId(req.user.id)
+  return res.json({ success: true, data: { categories } })
 
 getDomains(req, res, next)
   // Reads pre-computed DomainStats collection
@@ -624,12 +674,14 @@ src/
 │   ├── file.model.ts
 │   ├── download-event.model.ts
 │   ├── download-metrics.model.ts
-│   └── domain-stats.model.ts              ← new
+│   ├── domain-stats.model.ts
+│   └── category-stats.model.ts
 ├── repositories/
 │   ├── file.repository.ts
 │   ├── download-event.repository.ts
 │   ├── download-metrics.repository.ts
-│   └── domain-stats.repository.ts         ← new
+│   ├── domain-stats.repository.ts
+│   └── category-stats.repository.ts
 ├── services/
 │   ├── download.service.ts
 │   └── download-metrics.service.ts
@@ -646,17 +698,19 @@ src/
 ## Implementation Order
 
 ```
-1. domain-stats.model.ts          ← new model
-2. download-metrics.model.ts      ← updated: remove trend[], remove domains[]
-3. file.repository.ts             ← unchanged
-4. download-event.repository.ts   ← add getTrend() + findRecent()
-5. download-metrics.repository.ts ← unchanged
-6. domain-stats.repository.ts     ← new: findByUserId + upsertOnDownload
-7. download-metrics.service.ts    ← updated: remove trend logic, add DomainStats call
-8. download.service.ts            ← minor: remove event param from metrics call
-9. download.controller.ts         ← add getRecentEvents, update getTrend
-10. download.schemas.ts            ← unchanged
-11. download.routes.ts             ← add /recent route
+1. domain-stats.model.ts
+2. category-stats.model.ts
+3. download-metrics.model.ts      ← remove trend[], domains[], categories[]
+4. file.repository.ts
+5. download-event.repository.ts
+6. download-metrics.repository.ts
+7. domain-stats.repository.ts
+8. category-stats.repository.ts
+9. download-metrics.service.ts    ← add DomainStats + CategoryStats calls
+10. download.service.ts
+11. download.controller.ts
+12. download.schemas.ts
+13. download.routes.ts
 ```
 
 ---
@@ -686,16 +740,17 @@ POST /api/downloads
   2. FileRepository.create()                 if new file
   3. DownloadEventRepository.create()        always
   4. DownloadMetricsService.updateOnDownload()
-       → upserts UserDownloadMetrics         cards + categories
+       → upserts UserDownloadMetrics         cards (today/week/month/total/wasted)
        → upserts DomainStats                 domain breakdown
+       → upserts CategoryStats               category breakdown
 ```
 
 ### Read Path — Pre-computed vs On-demand
 ```
 O(1) reads (pre-computed on write):
   /stats       → UserDownloadMetrics (one document)
-  /categories  → UserDownloadMetrics.categories[]
-  /domains     → DomainStats (one doc per domain, sorted by total)
+  /categories  → CategoryStats (one doc per category, sorted by totalCount)
+  /domains     → DomainStats (one doc per domain, sorted by totalCount)
 
 On-demand aggregation (fast with indexes):
   /trend       → GROUP BY date on DownloadEvent (~5ms at current scale)
@@ -706,4 +761,222 @@ Live indexed queries:
   /events      → paginated DownloadEvents (indexed, filtered)
   /files/:id   → single File document
   /files/:id/timeline → DownloadEvents by fileId
+```
+
+---
+
+## Infrastructure — Redis + BullMQ
+
+### Redis Setup
+
+```
+Local dev   → Docker container (localhost:6379)
+Production  → AWS ElastiCache (same VPC as EC2/ECS — private network, ~0.1ms latency)
+```
+
+**docker-compose.yml** (repo root):
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: surfbud-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+```
+
+**src/config/redis.ts**:
+```typescript
+import { Redis } from 'ioredis'
+
+export const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+  maxRetriesPerRequest: null,   // required by BullMQ — do not remove
+  enableReadyCheck:     false,  // required by BullMQ — do not remove
+  lazyConnect:          true,
+})
+```
+
+### BullMQ Queues — src/jobs/queues.ts
+
+All async jobs use BullMQ — one system, uniform pattern.
+
+```typescript
+export const QUEUE_NAMES = {
+  AI_INSIGHTS:    'ai-insights',
+  METRICS_ROLLUP: 'metrics-rollup',
+  STREAK_CHECK:   'streak-check',
+  EMAIL_DIGEST:   'email-digest',
+} as const
+
+const defaultJobOptions = {
+  attempts:         3,
+  backoff:          { type: 'exponential' as const, delay: 2000 },
+  removeOnComplete: { count: 100 },
+  removeOnFail:     { count: 50  },
+}
+
+export const metricsRollupQueue = new Queue(QUEUE_NAMES.METRICS_ROLLUP, { connection: redis, defaultJobOptions })
+// ... other queues
+```
+
+### Metrics Rollup Cron — Design
+
+Runs every 30 minutes. Only processes users whose timezone is currently within
+30 minutes after their local midnight. Most runs do zero DB work.
+
+**Why 30 minutes:**
+All UTC offsets in the world are multiples of 30 minutes (e.g. UTC+5:30, UTC+5:45, UTC+9:30).
+Running every 30 minutes guarantees every timezone is caught within one window of their midnight.
+Running hourly would miss offsets like UTC+5:30 if the timing doesn't align.
+
+**Why only AFTER midnight (h === 0):**
+We never reset before the user's day is over. The window is 00:00–00:30 only, never 23:30–23:59.
+
+**Active timezone cache in Redis:**
+Instead of checking all ~600 IANA timezones every run, we maintain a Redis key
+`active:timezones` containing only the distinct timezones our users are actually in.
+Built at startup, updated when a new user registers with a new timezone.
+Reduces Intl calls from ~600 to N (where N = distinct user timezones in your DB).
+
+### Metrics Rollup — src/jobs/scheduler.ts
+
+```typescript
+export async function startScheduler(): Promise<void> {
+  // Build active timezone cache on startup
+  const zones = await User.distinct('timezone')
+  await redis.set('active:timezones', JSON.stringify(zones))
+
+  // Clear stale schedules — prevents duplicates on redeploy
+  const existing = await metricsRollupQueue.getRepeatableJobs()
+  for (const job of existing) {
+    await metricsRollupQueue.removeRepeatableByKey(job.key)
+  }
+
+  // One job, registered once, never changes
+  await metricsRollupQueue.add(
+    'metrics-rollup',
+    {},
+    {
+      repeat: { pattern: '*/30 * * * *' },  // every 30 minutes
+      jobId:  'metrics-rollup',
+    }
+  )
+}
+```
+
+### Metrics Rollup — src/jobs/workers/metrics-rollup.worker.ts
+
+```typescript
+export const metricsRollupWorker = new Worker(
+  QUEUE_NAMES.METRICS_ROLLUP,
+  async () => {
+    // Step 1 — which of our user timezones are at midnight right now?
+    const activeZones: string[] = JSON.parse(
+      await redis.get('active:timezones') ?? '[]'
+    )
+    const midnightZones = activeZones.filter(tz => isAtMidnight(tz))
+    if (midnightZones.length === 0) return   // most runs exit here — zero DB calls
+
+    // Step 2 — users in those timezones
+    const users = await User.find(
+      { timezone: { $in: midnightZones } },
+      { _id: 1, timezone: 1 }
+    ).lean()
+    if (users.length === 0) return
+
+    const userIds     = users.map(u => u._id)
+    const timezoneMap = Object.fromEntries(
+      users.map(u => [u._id.toString(), u.timezone])
+    )
+
+    // Step 3 — their metrics docs
+    const metricsDocs = await UserDownloadMetrics.find(
+      { userId: { $in: userIds } }
+    ).lean()
+    if (metricsDocs.length === 0) return
+
+    // Step 4 — build bulk ops, one per stale doc
+    const bulkOps = metricsDocs.map(doc => {
+      const tz         = timezoneMap[doc.userId.toString()] ?? 'UTC'
+      const today      = toDateString(new Date(), tz)
+      const weekStart  = getMondayString(new Date(), tz)
+      const monthStart = getMonthStartString(new Date(), tz)
+      const set: Record<string, unknown> = { updatedAt: new Date() }
+
+      if (doc.todayDate !== today) {
+        set.prevTodayCount = doc.todayCount
+        set.todayCount     = 0
+        set.todayDate      = today
+      }
+      if (doc.weekStart !== weekStart) {
+        set.prevWeekCount = doc.weekCount
+        set.weekCount     = 0
+        set.weekStart     = weekStart
+      }
+      if (doc.monthStart !== monthStart) {
+        set.prevMonthCount = doc.monthCount
+        set.monthCount     = 0
+        set.monthStart     = monthStart
+      }
+
+      return { updateOne: { filter: { _id: doc._id }, update: { $set: set } } }
+    })
+
+    // Step 5 — one bulkWrite round trip
+    await UserDownloadMetrics.bulkWrite(bulkOps, { ordered: false })
+
+    logger.info('metrics-rollup complete', {
+      zonesProcessed: midnightZones.length,
+      usersProcessed: metricsDocs.length,
+    })
+  },
+  { connection: redis, concurrency: 1 }
+)
+
+// isAtMidnight — only catches the 30-min window AFTER midnight
+function isAtMidnight(tz: string, windowMinutes: number = 30): boolean {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    hour:     '2-digit',
+    minute:   '2-digit',
+    hour12:   false,
+  }).formatToParts(new Date())
+
+  const h = Number(parts.find(p => p.type === 'hour')?.value   ?? '99')
+  const m = Number(parts.find(p => p.type === 'minute')?.value ?? '99')
+
+  return h === 0 && m <= windowMinutes
+}
+```
+
+### Active Timezone Cache — When to Update
+
+```
+1. App startup        → User.distinct('timezone') → redis.set('active:timezones', ...)
+2. User registers     → if timezone not in cache → push and re-save
+3. User updates tz    → rebuild cache (future — not needed Phase 1)
+```
+
+Update on registration (in auth.service.ts or auth.controller.ts):
+```typescript
+const cached: string[] = JSON.parse(await redis.get('active:timezones') ?? '[]')
+if (!cached.includes(timezone)) {
+  cached.push(timezone)
+  await redis.set('active:timezones', JSON.stringify(cached))
+}
+```
+
+### Startup Order — src/app.ts
+
+```typescript
+await redis.connect()    // 1. Redis first
+await connectDB()        // 2. MongoDB second
+await startScheduler()   // 3. Build timezone cache + register BullMQ jobs
+                         // 4. Workers auto-connect on import
 ```

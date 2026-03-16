@@ -3,6 +3,7 @@ import clsx from "clsx";
 
 interface TextFieldProps {
   label: string;
+  showLabel?: boolean;
   placeholder?: string;
   type?: "text" | "email" | "password";
   value: string;
@@ -18,6 +19,7 @@ interface TextFieldProps {
 
 export function TextField({
   label,
+  showLabel = true,
   placeholder,
   type = "text",
   value,
@@ -40,12 +42,14 @@ export function TextField({
 
   return (
     <div className={clsx("space-y-2", containerClassName)}>
-      <label
-        htmlFor={id}
-        className="block text-base font-normal tracking-tight text-[var(--color-text-heading)]"
-      >
-        {label}
-      </label>
+      {showLabel ? (
+        <label
+          htmlFor={id}
+          className="block text-base font-normal tracking-tight text-[var(--color-text-heading)]"
+        >
+          {label}
+        </label>
+      ) : null}
 
       <div className="relative">
         <input

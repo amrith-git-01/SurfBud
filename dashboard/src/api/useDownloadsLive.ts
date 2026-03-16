@@ -2,9 +2,8 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSocket } from '@/hooks/useSocket';
 import { downloadKeys } from '@/api/useDownloads';
+import type { UserDownloadMetrics } from '@/api/downloads.api';
 import type {
-  DownloadNewPayload,
-  DownloadUpdatedPayload,
   MetricsDeltaPayload,
 } from '@/types/shared/websocket.types';
 
@@ -20,9 +19,7 @@ export function useDownloadsLive() {
     if (!socket || !isConnected) return;
 
     // Event 1: New download completed
-    const handleDownloadNew = (data: DownloadNewPayload) => {
-      console.log('[Downloads Live] New download:', data);
-
+    const handleDownloadNew = () => {
       // Invalidate all affected queries
       // React Query will auto-refetch in background
       queryClient.invalidateQueries({ queryKey: downloadKeys.stats() });
@@ -44,9 +41,7 @@ export function useDownloadsLive() {
     };
 
     // Event 2: Download updated (removed flag changed)
-    const handleDownloadUpdated = (data: DownloadUpdatedPayload) => {
-      console.log('[Downloads Live] Download updated:', data);
-
+    const handleDownloadUpdated = () => {
       // Invalidate recent feed and any event lists
       queryClient.invalidateQueries({ queryKey: downloadKeys.recent() });
       queryClient.invalidateQueries({
@@ -62,10 +57,8 @@ export function useDownloadsLive() {
 
     // Event 3: Metrics delta (optional optimization — direct cache update)
     const handleMetricsDelta = (data: MetricsDeltaPayload) => {
-      console.log('[Downloads Live] Metrics delta:', data);
-
       // Directly update stats cache without refetch
-      queryClient.setQueryData(downloadKeys.stats(), (old: any) => {
+      queryClient.setQueryData(downloadKeys.stats(), (old: UserDownloadMetrics | null | undefined) => {
         if (!old) return old;
         return {
           ...old,

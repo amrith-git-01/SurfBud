@@ -6,8 +6,10 @@ import { DownloadEventRepository } from "../repositories/download-event.reposito
 import { DownloadMetricsService } from "./download-metrics.service";
 import { DownloadSettingsService } from "./download-settings.service";
 import { NotFoundError } from "../utils/errors";
-import { inferFileCategory, type FileCategory } from "../utils/file-utils";
+import { inferFileCategory } from "../utils/file-utils";
 import { socketManager } from "../websocket/socket.manager";
+
+const MS_PER_MINUTE = 60 * 1000;
 import { scheduleRemoval, cancelRemovalJob } from "../jobs/queues";
 
 export interface DownloadPayload {
@@ -62,6 +64,7 @@ export const DownloadService = {
         hash: payload.hash ?? `no-hash-${Date.now()}`,
         filename: payload.filename,
         url: payload.url,
+        savedPath: payload.savedPath,
         size: payload.size,
         fileExtension: inferred.fileExtension,
         fileCategory: inferred.category,
@@ -70,6 +73,18 @@ export const DownloadService = {
       })) as IFile;
     } else {
       file = existingFile as IFile;
+
+      if (payload.savedPath && !file.savedPath) {
+        const updatedFile = await FileRepository.setSavedPathIfMissing(
+          userId,
+          String(file._id),
+          payload.savedPath,
+        );
+
+        if (updatedFile) {
+          file = updatedFile as IFile;
+        }
+      }
     }
 
     const event = await DownloadEventRepository.create({
@@ -96,10 +111,8 @@ export const DownloadService = {
     });
 
     if (status === "duplicate" && payload.hash && payload.savedPath) {
-      const category = (file.fileCategory ?? inferred.category) as FileCategory;
       const decision = await DownloadSettingsService.getRemovalDecision(userId, {
         sourceDomain: payload.sourceDomain,
-        category,
       });
 
       if (decision.shouldAutoRemove) {
@@ -124,7 +137,7 @@ export const DownloadService = {
           );
 
           const scheduledAt = new Date(
-            Date.now() + decision.gracePeriodMinutes * 60 * 1000,
+            Date.now() + decision.gracePeriodMinutes * MS_PER_MINUTE,
           );
 
           await DownloadEventRepository.markRemovalScheduled({
@@ -148,7 +161,16 @@ export const DownloadService = {
   async markRemoved(userId: string, eventId: string): Promise<IDownloadEvent> {
     const event = await DownloadEventRepository.markRemoved(eventId, userId);
     if (!event) {
+      const existingEvent = await DownloadEventRepository.findById(eventId, userId);
+      if (existingEvent) {
+        return existingEvent;
+      }
+
       throw new NotFoundError("Download event not found");
+    }
+
+    if (event.status === "duplicate") {
+      await DownloadMetricsService.reconcileDuplicateSize(userId);
     }
 
     socketManager.emitDownloadUpdated(userId, {
@@ -175,6 +197,8 @@ export const DownloadService = {
     });
 
     if (event) {
+      await DownloadMetricsService.reconcileDuplicateSize(userId);
+
       socketManager.emitDownloadUpdated(userId, {
         id: String(event._id),
         removed: true,
@@ -195,7 +219,29 @@ export const DownloadService = {
   },
 
   async getFileById(userId: string, fileId: string): Promise<IFile | null> {
-    return FileRepository.findById(userId, fileId);
+    const file = await FileRepository.findById(userId, fileId);
+
+    if (!file) {
+      return null;
+    }
+
+    if (file.savedPath?.trim()) {
+      return file;
+    }
+
+    const fallbackSavedPath =
+      await DownloadEventRepository.findLatestSavedPathByFileId(fileId, userId);
+
+    if (!fallbackSavedPath) {
+      return file;
+    }
+
+    void FileRepository.setSavedPathIfMissing(userId, fileId, fallbackSavedPath);
+
+    return {
+      ...file,
+      savedPath: fallbackSavedPath,
+    } as IFile;
   },
 
   async getFileTimeline(
@@ -219,6 +265,7 @@ export const DownloadService = {
       page: number;
       limit: number;
       status?: "new" | "duplicate";
+      isRemoved?: boolean;
       category?: string;
       domain?: string;
       excludeDomains?: string[];

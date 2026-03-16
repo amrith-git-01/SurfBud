@@ -8,7 +8,6 @@ import {
 } from "../middleware/validate.middleware";
 import { DownloadController } from "../controllers/download.controller";
 import {
-  CategoryRuleUpsertSchema,
   DomainRuleCreateSchema,
   DomainRuleUpdateSchema,
   EventsQuerySchema,
@@ -53,17 +52,6 @@ downloadRouter.delete(
   "/settings/rules/domains/:id",
   validateParams(ObjectIdParamSchema),
   DownloadController.deleteDomainRule,
-);
-
-downloadRouter.post(
-  "/settings/rules/categories",
-  validate(CategoryRuleUpsertSchema),
-  DownloadController.setCategoryRule,
-);
-downloadRouter.delete(
-  "/settings/rules/categories/:id",
-  validateParams(ObjectIdParamSchema),
-  DownloadController.deleteCategoryRule,
 );
 
 downloadRouter.get(

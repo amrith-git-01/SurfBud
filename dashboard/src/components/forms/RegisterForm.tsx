@@ -7,6 +7,7 @@ export interface RegisterFormData {
   email: string;
   password: string;
   confirmPassword: string;
+  timezone?: string;
 }
 
 interface RegisterFormErrors {
@@ -73,7 +74,13 @@ export function RegisterForm({
       return;
     }
     setErrors({});
-    onSubmit({ displayName, email, password, confirmPassword });
+    onSubmit({
+      displayName,
+      email,
+      password,
+      confirmPassword,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
   }
 
   function handleReset(): void {

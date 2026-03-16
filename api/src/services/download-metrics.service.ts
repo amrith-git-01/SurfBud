@@ -1,4 +1,5 @@
 import type { IFile } from "../models/file.model";
+import { DownloadEventRepository } from "../repositories/download-event.repository";
 import { DownloadMetricsRepository } from "../repositories/download-metrics.repository";
 import { DomainStatsRepository } from "../repositories/domain-stats.repository";
 import { CategoryStatsRepository } from "../repositories/category-stats.repository";
@@ -86,6 +87,11 @@ export const DownloadMetricsService = {
     const metrics = await DownloadMetricsRepository.findByUserId(userId);
     if (!metrics) return null;
 
+    const duplicateSize = await this.reconcileDuplicateSize(
+      userId,
+      metrics.duplicateSize,
+    );
+
     // Periods that have rolled over since the last download show stale counts.
     // Return zeroed values for those periods without mutating the DB.
     const todayStale = metrics.todayDate !== today;
@@ -100,7 +106,22 @@ export const DownloadMetricsService = {
       prevWeekCount: weekStale ? metrics.weekCount : metrics.prevWeekCount,
       monthCount: monthStale ? 0 : metrics.monthCount,
       prevMonthCount: monthStale ? metrics.monthCount : metrics.prevMonthCount,
+      duplicateSize,
     };
+  },
+
+  async reconcileDuplicateSize(
+    userId: string,
+    currentDuplicateSize?: number,
+  ): Promise<number> {
+    const activeDuplicateSize =
+      await DownloadEventRepository.getActiveDuplicateSize(userId);
+
+    if (currentDuplicateSize !== activeDuplicateSize) {
+      await DownloadMetricsRepository.setDuplicateSize(userId, activeDuplicateSize);
+    }
+
+    return activeDuplicateSize;
   },
 
   async getCategories(userId: string, limit?: number) {
