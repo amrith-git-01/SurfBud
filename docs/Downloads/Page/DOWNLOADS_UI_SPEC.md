@@ -354,8 +354,8 @@ Other                                   → file icon     (color: #94A3B8)
 
 ### Data Source
 ```
-GET /api/downloads/events?limit=10
-Returns: last 10 DownloadEvents sorted createdAt desc
+GET /api/downloads/recent
+Returns: last 10 DownloadEvents sorted createdAt desc (fixed 10, no params)
 No pagination · no filters · fixed snapshot
 Events populated with File fields: fileCategory, fileExtension, mimeType
 ```
@@ -479,7 +479,7 @@ Recharts BarChart:
 Each row:
   Domain name     → text-sm font-medium text-[#334155] font-mono
   Progress bar    → varied colors per domain, h-1.5 rounded-full
-  Stats           → "{total} downloads · {new} new · {dup} dup · {size}"
+  Stats           → "{totalCount} downloads · {newCount} new · {dupCount} dup · {size}"
                     text-xs text-[#94A3B8] tabular-nums
 ```
 
@@ -493,8 +493,13 @@ Recharts BarChart:
 
 ### Data Source
 ```
-GET /api/downloads/categories → UserDownloadMetrics.categories
-GET /api/downloads/domains    → UserDownloadMetrics.domains
+GET /api/downloads/categories → CategoryStats collection
+  Returns: { category, totalCount, newCount, dupCount, totalSize, newSize, dupSize }[]
+  Map to UI: { name: category, count: totalCount, size: totalSize }
+
+GET /api/downloads/domains    → DomainStats collection
+  Returns: { domain, totalCount, newCount, dupCount, totalSize, newSize, dupSize }[]
+
 Both pre-materialized — O(1) reads, no aggregation on request
 ```
 
@@ -592,7 +597,8 @@ Period options:
     Total card    → All Time
     Wasted card   → All Time   (Status also pre-set to Duplicate)
 
-Category: All · PDF · Word · Spreadsheet · Image · Video · Audio · Archive · Code · Other
+Category: All · Document · Image · Text · Code · Executable · Archive · Audio · Video · Other
+  (matches FILE_CATEGORIES from file-utils)
 Status:   All · New · Duplicate
 ```
 
@@ -843,7 +849,7 @@ All API endpoints consumed by this page are fully documented in `DOWNLOADS_API_S
 | Section 3 — Health Bars | `GET /api/downloads/stats` | Pre-computed O(1) | `UserDownloadMetrics` (same call as S1) |
 | Section 4 — Recent Feed | `GET /api/downloads/recent` | Live indexed query | `DownloadEvent` latest 10 |
 | Section 5 — Duplicate Groups | `GET /api/downloads/duplicates` | Live aggregation | `DownloadEvent` GROUP BY filename |
-| Section 6 — Categories | `GET /api/downloads/categories` | Pre-computed O(1) | `UserDownloadMetrics.categories[]` |
+| Section 6 — Categories | `GET /api/downloads/categories` | Pre-computed O(1) | `CategoryStats` collection |
 | Section 6 — Domains | `GET /api/downloads/domains` | Pre-computed O(1) | `DomainStats` collection |
 | Drawer — Details | `GET /api/downloads/files/:id` | Live | `File` collection |
 | Drawer — Timeline | `GET /api/downloads/files/:id/timeline` | Live | `DownloadEvent` by fileId |
@@ -853,17 +859,22 @@ All API endpoints consumed by this page are fully documented in `DOWNLOADS_API_S
 ```
 PRE-COMPUTED on every download (O(1) reads):
   Cards (today/week/month/total/wasted) → UserDownloadMetrics
-    Period counts use date-string reset triggers — no cron needed
-    todayCount resets when todayDate !== today (detected on next download)
+    Period counts use date-string reset triggers (inline) + BullMQ cron (for inactive users)
+    todayCount resets when todayDate !== today — computed in user's IANA timezone
+    prevTodayCount / prevWeekCount / prevMonthCount snapshotted at reset moment
+    Delta shown on cards (e.g. ↑ 5 vs yesterday) = current minus prev field
+    prevXxxCount only written on reset — always holds previous period's final total
+    'Today' means user's local midnight → midnight, not UTC
 
-  File Categories → UserDownloadMetrics.categories[]
-    Predetermined list — safe to increment per download
+  File Categories → CategoryStats collection
+    One doc per userId+category, uses FILE_CATEGORIES from file-utils
+    Atomic $inc per category — same pattern as DomainStats
+    Fields per category: totalCount, newCount, dupCount, totalSize, newSize, dupSize
 
   Domain breakdown → DomainStats collection
     Separate collection (not embedded array) — one doc per userId+domain
     Atomic $inc per domain — scales cleanly as domain count grows
-    Fields per domain: total, newCount, dupCount, newSize, dupSize, totalSize
-    Three size fields allow frontend to show new vs duplicate breakdown per domain
+    Fields per domain: totalCount, newCount, dupCount, newSize, dupSize, totalSize
 
 ON-DEMAND aggregation (fast with indexes):
   Trend chart  → GROUP BY date on DownloadEvent (~5ms with indexes)

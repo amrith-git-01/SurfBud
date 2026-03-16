@@ -73,7 +73,7 @@ SurfBud lives in a **single GitHub repository** with three clearly separated fol
 
 ```
 github.com/you/surfbud
-├── api/          →  deploys to Railway / Render / AWS EC2
+├── api/          →  deploys to AWS EC2 / ECS
 ├── dashboard/    →  deploys to Vercel / Netlify
 ├── extension/    →  builds to /dist zip → Chrome Web Store
 └── docs/         →  all project documentation
@@ -84,7 +84,7 @@ github.com/you/surfbud
 | Concern | Answer |
 |---|---|
 | **Do deployments stay independent?** | Yes — path-filtered GitHub Actions. A change in `dashboard/` never triggers the `api/` pipeline |
-| **Does Chrome Web Store still work?** | Yes — Vercel, Railway, and Chrome Web Store all support deploying from a subfolder |
+| **Does Chrome Web Store still work?** | Yes — Vercel, AWS, and Chrome Web Store all support deploying from a subfolder |
 | **Is it a monorepo with workspaces?** | No — no `pnpm-workspace.yaml`, no Turborepo, no linking. Three plain independent projects in one repo |
 | **Why not three separate repos?** | You are one developer. One clone, one issue board, one PR history, one portfolio link. Cross-cutting changes (e.g. updating a shared type) happen in a single commit |
 
@@ -228,8 +228,8 @@ jobs:
       - name: Install & Build
         working-directory: ./api
         run: npm install && npm run build
-      - name: Deploy to Railway
-        run: railway up --service surfbud-api
+      - name: Deploy to AWS EC2/ECS
+        run: # aws ecs update-service or ssh deploy script
 ```
 
 ```yaml
@@ -351,7 +351,8 @@ dashboard/                                                   │
 | **Socket.IO** | WebSocket server | Real-time events to dashboard + side panel |
 | **BullMQ** | Job queue | Async AI jobs, cron tasks, metrics rollups — never blocks the API |
 | **Zod** | Validation | Runtime schema validation on all incoming requests |
-| **JWT** | Authentication | Stateless auth with refresh token rotation |
+| **JWT** | Authentication | Stateless auth — single token, 7 day expiry |
+| **IANA Timezone** | User preference | Stored on User doc · auto-detected from client · drives all date resets |
 
 ### AI Layer
 | Technology | Role |
@@ -388,10 +389,10 @@ dashboard/                                                   │
 ### Infrastructure
 | Technology | Role |
 |---|---|
-| **AWS EC2 / Railway** | API hosting |
+| **AWS EC2 / ECS** | API hosting |
 | **Vercel / Netlify** | Dashboard static hosting |
 | **MongoDB Atlas** | Managed MongoDB |
-| **Redis Cloud / Upstash** | Managed Redis |
+| **AWS ElastiCache** | Managed Redis (prod) · Docker locally |
 | **AWS SES** | Transactional email (streak digests) |
 
 ---
@@ -1274,7 +1275,7 @@ await UserMetricsModel.find({ dataVersion: { $lt: CURRENT_METRICS_VERSION } })
 ### MongoDB Collections
 
 ```
-users                 ← auth, preferences (no subscription field during dev phase)
+users                 ← auth, preferences, timezone (IANA name — no subscription field during dev phase)
 modes                 ← mode definitions, tab sets, blocking rules
 sessions              ← raw mode session events (start/end/duration)
 downloads             ← raw download events
@@ -1327,6 +1328,9 @@ session:active:{userId}                 TTL: none (cleared on mode deactivate)
 
 # Socket rooms
 socket:sidepanel:{userId}              TTL: none (cleared on disconnect)
+
+# Active user timezones cache (built at startup, updated on new user registration)
+active:timezones                        TTL: none (permanent, updated in-place)
 
 # BullMQ queues (managed by BullMQ)
 bull:ai-insights:{jobId}
@@ -1468,18 +1472,64 @@ const SIDE_PANEL_EVENTS: ServerEvent[] = [
 
 ```
 Login
-  → Generate access token (15 min TTL)
-  → Generate refresh token (7 day TTL) → store in Redis + httpOnly cookie
-  → Return access token to client
+  → Validate credentials
+  → Generate single JWT (7 day expiry)
+  → Return token to client
 
 Authenticated Request
-  → Verify access token (auth.middleware.ts)
-  → If expired → client sends refresh token → issue new access token
-  → If refresh token invalid/expired → force re-login
+  → Client sends: Authorization: Bearer <token>
+  → auth.middleware.ts verifies signature + expiry
+  → req.user populated with { id, email }
+  → Request proceeds
 
 Logout
-  → Delete refresh token from Redis (immediate invalidation)
-  → Client discards access token
+  → Client discards token
+  → No server-side state to clean up
+```
+
+> **Intentional simplicity:** No refresh tokens, no Redis token store, no httpOnly cookies.
+> A 7-day token covers normal usage. If a token needs invalidating before expiry (e.g. password
+> change), that is a Phase 2 concern. For Phase 1, keep auth simple and move fast.
+
+### Timezone Detection
+
+User's IANA timezone is auto-detected from the client on login — zero user input needed.
+
+```typescript
+// Dashboard + extension send this on every login
+const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+// e.g. 'Asia/Kolkata', 'America/New_York', 'Europe/London'
+
+// Auth endpoint saves it to User doc
+await UserRepository.updateTimezone(userId, timezone)
+```
+
+Stored as `timezone: string` on the User model (default: `'UTC'`).
+Used by `DownloadMetricsService` and the metrics-rollup cron worker to compute
+date strings (`today`, `weekStart`, `monthStart`) in the user's local time.
+
+On registration/login, if the timezone is new, it is added to the `active:timezones`
+Redis cache so the cron worker picks it up without a DB scan:
+```typescript
+const cached: string[] = JSON.parse(await redis.get('active:timezones') ?? '[]')
+if (!cached.includes(timezone)) {
+  cached.push(timezone)
+  await redis.set('active:timezones', JSON.stringify(cached))
+}
+```
+This ensures "today's downloads" resets at the user's local midnight — not UTC midnight.
+
+```typescript
+// src/utils/date.utils.ts
+export function toDateString(date: Date, timezone: string = 'UTC'): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year:     'numeric',
+    month:    '2-digit',
+    day:      '2-digit',
+  }).format(date)
+  // en-CA locale produces YYYY-MM-DD natively — no string manipulation needed
+}
 ```
 
 > **Note on subscription claims in JWT:** No subscription tier or feature flag is encoded in the JWT during the current development phase. All authenticated users have identical access. When monetization is introduced in Phase 3, a `plan` claim will be added to the token payload and a `checkPlan` middleware will be introduced — but this requires zero changes to the existing auth flow.
@@ -1512,9 +1562,10 @@ Queue: ai-insights
   └── Job: generate-mode-suggestion (triggered on mode activation)
 
 Queue: metrics-rollup
-  ├── Job: daily-rollup             (every day 00:00)
-  ├── Job: weekly-rollup            (every Sunday 00:00)
-  └── Job: top-sites-rollup         (every hour)
+  └── Job: metrics-rollup           (every 30 min — resets period counts for users
+                                     whose IANA timezone is currently at midnight)
+                                     Only touches users in midnight-window timezones.
+                                     Most runs exit after one Redis read.
 
 Queue: streak-evaluation
   └── Job: evaluate-all-streaks     (every day 00:01)
@@ -1638,9 +1689,8 @@ MONGODB_URI=mongodb+srv://...
 REDIS_URL=redis://...
 
 # JWT
-JWT_SECRET=your-secret-here
-JWT_EXPIRES_IN=15m
-REFRESH_TOKEN_EXPIRES_IN=7d
+JWT_SECRET=your-secret-here   # min 32 chars — openssl rand -hex 32
+JWT_EXPIRES_IN=7d
 
 # Groq
 GROQ_API_KEY=gsk_...
@@ -1699,17 +1749,17 @@ The layered architecture scales without rewriting. You add instances and separat
 Stage 1 — Full Product Build (now)
   Single Node.js process
   MongoDB Atlas M0 (free)
-  Redis local or Upstash free tier
-  Deploy: Railway or Render free tier
+  Redis via Docker locally
+  Deploy: AWS EC2 (single instance)
   All features enabled for all users — no tier gating
   Cost: $0/month
 
 Stage 2 — Beta (50–500 users)
   Same codebase, zero changes needed
   MongoDB Atlas M10 ($57/mo)
-  Redis Cloud free → paid
+  AWS ElastiCache (cache.t3.micro)
   Add PM2 process manager
-  Deploy: Railway hobby plan
+  Deploy: AWS EC2
   Cost: ~$60/month
 
 Stage 3 — Growth + Monetization (500–10K users)
@@ -1718,7 +1768,7 @@ Stage 3 — Growth + Monetization (500–10K users)
   Socket.IO with Redis adapter (multi-instance WS)
   Separate BullMQ worker process
   MongoDB Atlas M30
-  Deploy: AWS EC2 + load balancer
+  Deploy: AWS ECS + load balancer
   Cost: ~$200/month
 
 Stage 4 — Scale (10K+ users)
