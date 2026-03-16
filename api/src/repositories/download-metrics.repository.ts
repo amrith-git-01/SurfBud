@@ -18,4 +18,16 @@ export const DownloadMetricsRepository = {
       { upsert: true, returnDocument: "after" },
     ).exec();
   },
+
+  async setDuplicateSize(userId: string, duplicateSize: number): Promise<void> {
+    await UserDownloadMetrics.updateOne(
+      { userId: new Types.ObjectId(userId) },
+      {
+        $set: {
+          duplicateSize,
+          updatedAt: new Date(),
+        },
+      },
+    ).exec();
+  },
 };

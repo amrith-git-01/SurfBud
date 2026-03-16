@@ -5,17 +5,10 @@ import {
   type IUserDownloadRule,
   UserDownloadRuleModel,
 } from "../models/user-download-rule.model";
-import type { FileCategory } from "../utils/file-utils";
 
 export interface CreateDomainRuleDto {
   userId: string;
   domain: string;
-  rule: DownloadRuleValue;
-}
-
-export interface UpsertCategoryRuleDto {
-  userId: string;
-  category: FileCategory;
   rule: DownloadRuleValue;
 }
 
@@ -37,16 +30,6 @@ export const DownloadRuleRepository = {
       .exec() as Promise<IUserDownloadRule[]>;
   },
 
-  async findCategoryRulesByUserId(userId: string): Promise<IUserDownloadRule[]> {
-    return UserDownloadRuleModel.find({
-      userId: new Types.ObjectId(userId),
-      ruleType: "category",
-    })
-      .sort({ createdAt: -1 })
-      .lean()
-      .exec() as Promise<IUserDownloadRule[]>;
-  },
-
   async findDomainRuleByDomain(
     userId: string,
     domain: string,
@@ -55,19 +38,6 @@ export const DownloadRuleRepository = {
       userId: new Types.ObjectId(userId),
       ruleType: "domain",
       domain,
-    })
-      .lean()
-      .exec();
-  },
-
-  async findCategoryRuleByCategory(
-    userId: string,
-    category: FileCategory,
-  ): Promise<IUserDownloadRule | null> {
-    return UserDownloadRuleModel.findOne({
-      userId: new Types.ObjectId(userId),
-      ruleType: "category",
-      category,
     })
       .lean()
       .exec();
@@ -90,7 +60,6 @@ export const DownloadRuleRepository = {
       userId: new Types.ObjectId(data.userId),
       ruleType: "domain",
       domain: data.domain,
-      category: null,
       rule: data.rule,
     });
 
@@ -130,35 +99,4 @@ export const DownloadRuleRepository = {
     return doc as IUserDownloadRule | null;
   },
 
-  async upsertCategoryRule(
-    data: UpsertCategoryRuleDto,
-  ): Promise<IUserDownloadRule> {
-    const doc = await UserDownloadRuleModel.findOneAndUpdate(
-      {
-        userId: new Types.ObjectId(data.userId),
-        ruleType: "category",
-        category: data.category,
-      },
-      {
-        $set: {
-          rule: data.rule,
-        },
-        $setOnInsert: {
-          userId: new Types.ObjectId(data.userId),
-          ruleType: "category",
-          category: data.category,
-          domain: null,
-        },
-      },
-      {
-        upsert: true,
-        returnDocument: "after",
-        setDefaultsOnInsert: true,
-      },
-    )
-      .lean()
-      .exec();
-
-    return doc as IUserDownloadRule;
-  },
 };

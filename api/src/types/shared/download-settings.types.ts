@@ -1,6 +1,6 @@
 export type DownloadRuleValue = "dont_track" | "track_keep" | "track_remove";
 export type GracePeriodType = "immediate" | "delayed";
-export type GracePeriodMinutes = 15 | 30 | 60;
+export type GracePeriodMinutes = 0.5 | 15 | 30 | 60;
 
 export type FileCategory =
   | "document"
@@ -19,12 +19,6 @@ export interface DomainRule {
   rule: DownloadRuleValue;
 }
 
-export interface CategoryRule {
-  _id: string;
-  category: FileCategory;
-  rule: DownloadRuleValue;
-}
-
 export interface RoutingFolder {
   _id: string;
   folderName: string;
@@ -38,7 +32,6 @@ export interface DownloadSettings {
   gracePeriodMinutes: GracePeriodMinutes;
   routingEnabled: boolean;
   domainRules: DomainRule[];
-  categoryRules: CategoryRule[];
   routingFolders: RoutingFolder[];
 }
 

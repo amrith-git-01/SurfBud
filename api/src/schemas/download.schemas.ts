@@ -10,6 +10,7 @@ const DownloadRuleInputSchema = z
   );
 const GracePeriodTypeSchema = z.enum(["immediate", "delayed"]);
 const GracePeriodMinutesSchema = z.union([
+  z.literal(0.5),
   z.literal(15),
   z.literal(30),
   z.literal(60),
@@ -73,11 +74,6 @@ export const DomainRuleUpdateSchema = z.object({
   rule: DownloadRuleInputSchema,
 });
 
-export const CategoryRuleUpsertSchema = z.object({
-  category: FileCategorySchema,
-  rule: DownloadRuleInputSchema,
-});
-
 export const RoutingFolderCreateSchema = z.object({
   folderName: z.string().trim().min(1, "Folder name is required").max(50),
 });
@@ -115,6 +111,15 @@ export const EventsQuerySchema = z.preprocess(
     page: z.coerce.number().int().positive().default(1),
     limit: z.coerce.number().int().positive().max(50).default(10),
     status: z.enum(["new", "duplicate"]).optional(),
+    isRemoved: z.preprocess((value) => {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === "true") return true;
+        if (normalized === "false") return false;
+      }
+      return undefined;
+    }, z.boolean()).optional(),
     category: z.string().optional(),
     domain: z.string().min(1).optional(),
     excludeDomains: z

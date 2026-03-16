@@ -45,7 +45,7 @@ export async function scheduleRemoval(
   userId: string,
   savedPath: string,
   hash: string,
-  gracePeriodMinutes: number,
+  gracePeriod: number,
 ): Promise<string> {
   const jobId = getRemovalJobId(userId, hash);
   const existing = await removalQueue.getJob(jobId);
@@ -59,7 +59,7 @@ export async function scheduleRemoval(
     { userId, savedPath, hash },
     {
       jobId,
-      delay: gracePeriodMinutes * 60 * 1000,
+      delay: gracePeriod * 60 * 1000,
     },
   );
 
