@@ -114,6 +114,22 @@ color: var(--color-text-muted);
 margin-bottom: 16px;
 }
 
+.section-title-display {
+font-family: var(--font-display);
+font-size: 20px;
+font-weight: 700;
+line-height: 1.2;
+color: var(--color-text-heading);
+}
+
+.section-description {
+font-family: var(--font-sans);
+font-size: 12px;
+font-weight: 400;
+line-height: 1.45;
+color: var(--color-text-muted);
+}
+
 /* ─── Glass (metric cards — frosted glass, particles show through) ─── */
 .card-metric-glass {
   background: rgba(255, 255, 255, 0.40); /* Less transparent, more solid */

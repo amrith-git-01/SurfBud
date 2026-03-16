@@ -116,6 +116,7 @@ export interface EventsQueryParams {
   limit?: number;
   period?: "today" | "week" | "month" | "all";
   status?: "new" | "duplicate";
+  isRemoved?: boolean;
   category?: string;
   domain?: string;
   excludeDomains?: string[];
@@ -131,7 +132,7 @@ const DEFAULT_EVENTS_PARAMS = { page: 1, limit: 10 } as const;
 
 export type DownloadRuleValue = "dont_track" | "track_keep" | "track_remove";
 export type GracePeriodType = "immediate" | "delayed";
-export type GracePeriodMinutes = 15 | 30 | 60;
+export type GracePeriodMinutes = 0.5 | 15 | 30 | 60;
 
 export type FileCategory =
   | "document"
@@ -150,12 +151,6 @@ export interface DomainRule {
   rule: DownloadRuleValue;
 }
 
-export interface CategoryRule {
-  _id: string;
-  category: FileCategory;
-  rule: DownloadRuleValue;
-}
-
 export interface RoutingFolder {
   _id: string;
   folderName: string;
@@ -169,7 +164,6 @@ export interface DownloadSettings {
   gracePeriodMinutes: GracePeriodMinutes;
   routingEnabled: boolean;
   domainRules: DomainRule[];
-  categoryRules: CategoryRule[];
   routingFolders: RoutingFolder[];
 }
 
@@ -187,11 +181,6 @@ export interface CreateDomainRuleInput {
 }
 
 export interface UpdateDomainRuleInput {
-  rule: DownloadRuleValue;
-}
-
-export interface UpsertCategoryRuleInput {
-  category: FileCategory;
   rule: DownloadRuleValue;
 }
 
@@ -328,23 +317,6 @@ export async function updateDomainRule(
 export async function deleteDomainRule(id: string): Promise<DownloadSettings> {
   const { data } = await api.delete<ApiResponse<DownloadSettings>>(
     `${BASE}/settings/rules/domains/${id}`,
-  );
-  return data.data;
-}
-
-export async function upsertCategoryRule(
-  payload: UpsertCategoryRuleInput,
-): Promise<DownloadSettings> {
-  const { data } = await api.post<ApiResponse<DownloadSettings>>(
-    `${BASE}/settings/rules/categories`,
-    payload,
-  );
-  return data.data;
-}
-
-export async function deleteCategoryRule(id: string): Promise<DownloadSettings> {
-  const { data } = await api.delete<ApiResponse<DownloadSettings>>(
-    `${BASE}/settings/rules/categories/${id}`,
   );
   return data.data;
 }
