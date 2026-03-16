@@ -30,7 +30,7 @@ interface DrawerListModeProps {
   totalPages: number;
   onPrevPage: () => void;
   onNextPage: () => void;
-  onSelectFile: (fileId: string) => void;
+  onSelectFile: (fileId: string, eventId: string) => void;
   onClose: () => void;
 }
 
@@ -198,7 +198,7 @@ export function DrawerListMode({
                 type="button"
                 onClick={() => {
                   if (!fileId) return;
-                  onSelectFile(fileId);
+                  onSelectFile(fileId, event._id);
                 }}
                 disabled={!isClickable}
                 className="mb-3 w-full rounded-xl border border-[var(--color-border)] bg-white text-left transition-colors duration-150 hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-60"

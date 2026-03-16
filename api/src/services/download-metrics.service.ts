@@ -87,9 +87,10 @@ export const DownloadMetricsService = {
     const metrics = await DownloadMetricsRepository.findByUserId(userId);
     if (!metrics) return null;
 
-    const duplicateSize = await this.reconcileDuplicateSize(
+    const { duplicateSize, totalSize } = await this.reconcileDuplicateSize(
       userId,
       metrics.duplicateSize,
+      metrics.totalSize,
     );
 
     // Periods that have rolled over since the last download show stale counts.
@@ -106,6 +107,7 @@ export const DownloadMetricsService = {
       prevWeekCount: weekStale ? metrics.weekCount : metrics.prevWeekCount,
       monthCount: monthStale ? 0 : metrics.monthCount,
       prevMonthCount: monthStale ? metrics.monthCount : metrics.prevMonthCount,
+      totalSize,
       duplicateSize,
     };
   },
@@ -113,15 +115,27 @@ export const DownloadMetricsService = {
   async reconcileDuplicateSize(
     userId: string,
     currentDuplicateSize?: number,
-  ): Promise<number> {
+    currentTotalSize?: number,
+  ): Promise<{ duplicateSize: number; totalSize: number }> {
     const activeDuplicateSize =
       await DownloadEventRepository.getActiveDuplicateSize(userId);
+    const activeTotalSize = await DownloadEventRepository.getActiveTotalSize(userId);
 
-    if (currentDuplicateSize !== activeDuplicateSize) {
-      await DownloadMetricsRepository.setDuplicateSize(userId, activeDuplicateSize);
+    if (
+      currentDuplicateSize !== activeDuplicateSize ||
+      currentTotalSize !== activeTotalSize
+    ) {
+      await DownloadMetricsRepository.setDuplicateSize(
+        userId,
+        activeDuplicateSize,
+        activeTotalSize,
+      );
     }
 
-    return activeDuplicateSize;
+    return {
+      duplicateSize: activeDuplicateSize,
+      totalSize: activeTotalSize,
+    };
   },
 
   async getCategories(userId: string, limit?: number) {

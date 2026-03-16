@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Archive,
   Check,
   Code,
+  Copy,
   File,
   FileText,
   Image,
@@ -20,6 +21,7 @@ export type DrawerDetailView = "details" | "timeline";
 
 interface DrawerDetailModeProps {
   fileId: string | null;
+  eventId: string | null;
   initialView: DrawerDetailView;
   isActive: boolean;
   canGoBack: boolean;
@@ -54,6 +56,7 @@ const DEFAULT_CATEGORY_VISUAL: CategoryVisual = {
 
 export function DrawerDetailMode({
   fileId,
+  eventId,
   initialView,
   isActive,
   canGoBack,
@@ -64,10 +67,20 @@ export function DrawerDetailMode({
   const [activeView, setActiveView] = useState<DrawerDetailView>(initialView);
   const [isDetailsAnimated, setIsDetailsAnimated] = useState(false);
   const [isTimelineAnimated, setIsTimelineAnimated] = useState(false);
+  const [isSavedPathCopied, setIsSavedPathCopied] = useState(false);
+  const copyResetTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setActiveView(initialView);
   }, [initialView, fileId]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isActive || activeView !== "details") {
@@ -107,7 +120,23 @@ export function DrawerDetailMode({
 
   const fileCategory = normalizeCategory(file?.fileCategory);
   const visual = CATEGORY_VISUALS[fileCategory] ?? DEFAULT_CATEGORY_VISUAL;
-  const isRemoved = timeline?.[0]?.isRemoved ?? false;
+  const selectedEvent =
+    timeline?.find((event) => event._id === eventId) ?? timeline?.[0] ?? null;
+  const displayFilename = selectedEvent?.filename ?? file?.filename ?? "Unknown file";
+  const displaySavedPath =
+    selectedEvent?.savedPath?.trim() || file?.savedPath?.trim()
+      ? (selectedEvent?.savedPath?.trim() ? selectedEvent.savedPath : file?.savedPath) ??
+        "- Not captured yet"
+      : "- Not captured yet";
+  const displaySourceDomain =
+    selectedEvent?.sourceDomain?.trim() || file?.sourceDomain?.trim()
+      ? (selectedEvent?.sourceDomain?.trim()
+          ? selectedEvent.sourceDomain
+          : file?.sourceDomain) ?? "Unknown"
+      : "Unknown";
+  const displayDownloadedAt = selectedEvent?.createdAt ?? file?.createdAt ?? "";
+  const isRemoved = selectedEvent?.isRemoved ?? false;
+  const hasSavedPath = displaySavedPath !== "- Not captured yet";
   const detailsRows = [
     {
       label: "Size",
@@ -119,15 +148,15 @@ export function DrawerDetailMode({
     },
     {
       label: "Saved Path",
-      value: file?.savedPath?.trim() ? file.savedPath : "- Not captured yet",
-      isMono: Boolean(file?.savedPath?.trim()),
+      value: displaySavedPath,
+      isMono: displaySavedPath !== "- Not captured yet",
       isTabular: false,
-      title: file?.savedPath?.trim() ? file.savedPath : undefined,
-      isMutedItalic: !file?.savedPath?.trim(),
+      title: displaySavedPath !== "- Not captured yet" ? displaySavedPath : undefined,
+      isMutedItalic: displaySavedPath === "- Not captured yet",
     },
     {
       label: "Source Domain",
-      value: file?.sourceDomain?.trim() ? file.sourceDomain : "Unknown",
+      value: displaySourceDomain,
       isMono: false,
       isTabular: false,
       title: undefined,
@@ -151,13 +180,35 @@ export function DrawerDetailMode({
     },
     {
       label: "Downloaded At",
-      value: formatDateTime(file?.createdAt ?? ""),
+      value: formatDateTime(displayDownloadedAt),
       isMono: false,
       isTabular: true,
       title: undefined,
       isMutedItalic: false,
     },
   ];
+
+  const handleCopySavedPath = async (): Promise<void> => {
+    if (!hasSavedPath) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(displaySavedPath);
+      setIsSavedPathCopied(true);
+
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+
+      copyResetTimeoutRef.current = window.setTimeout(() => {
+        setIsSavedPathCopied(false);
+        copyResetTimeoutRef.current = null;
+      }, 1400);
+    } catch {
+      setIsSavedPathCopied(false);
+    }
+  };
 
   return (
     <div className="flex h-full flex-col bg-white font-sans">
@@ -249,7 +300,7 @@ export function DrawerDetailMode({
                   </span>
 
                   <p className="mt-3 max-w-full break-words font-display text-xl font-bold text-[var(--color-text-heading)]">
-                    {file.filename}
+                    {displayFilename}
                   </p>
 
                   <span
@@ -280,27 +331,75 @@ export function DrawerDetailMode({
                       {detailsRows.map((row, index) => (
                         <div
                           key={row.label}
-                          className="flex items-center justify-between gap-4 py-3 transition-all duration-200 ease-out"
+                          className={[
+                            "flex justify-between gap-4 py-3 transition-all duration-200 ease-out",
+                            row.label === "Saved Path" ? "items-start" : "items-center",
+                          ].join(" ")}
                           style={{
                             opacity: isDetailsAnimated ? 1 : 0,
                             transform: isDetailsAnimated ? "translateY(0px)" : "translateY(8px)",
                             transitionDelay: `${index * 30}ms`,
                           }}
                         >
-                          <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
-                            {row.label}
-                          </p>
-                          <p
-                            className={[
-                              "min-w-0 max-w-[62%] truncate text-right text-[14px] font-medium text-[var(--color-text-heading)]",
-                              row.isMono ? "font-mono text-sm" : "font-sans",
-                              row.isMutedItalic ? "italic text-[var(--color-text-muted)]" : "",
-                              row.isTabular ? "tabular-nums" : "",
-                            ].join(" ")}
-                            title={row.title}
-                          >
-                            {row.value}
-                          </p>
+                          {row.label === "Saved Path" ? (
+                            <div className="shrink-0 flex items-center gap-2">
+                              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+                                {row.label}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void handleCopySavedPath()}
+                                disabled={!hasSavedPath}
+                                aria-label="Copy saved path"
+                                title={hasSavedPath ? "Copy saved path" : "Saved path not available"}
+                                className={[
+                                  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-all duration-200",
+                                  hasSavedPath
+                                    ? "text-[var(--color-primary)] hover:bg-[color:rgba(8,145,178,0.12)]"
+                                    : "cursor-not-allowed text-[var(--color-text-muted)] opacity-60",
+                                ].join(" ")}
+                              >
+                                {isSavedPathCopied ? (
+                                  <Check className="h-3.5 w-3.5 animate-[pulse_220ms_ease-out] text-[var(--color-primary)]" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5 text-[var(--color-primary)]" />
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+                              {row.label}
+                            </p>
+                          )}
+                          {row.label === "Saved Path" ? (
+                            <div className="min-w-0 max-w-[62%]">
+                              <div className="flex items-start justify-end">
+                                <p
+                                  className={[
+                                    "min-w-0 text-right text-[14px] font-medium text-[var(--color-text-heading)]",
+                                    row.isMono ? "font-mono text-sm" : "font-sans",
+                                    row.isMutedItalic ? "italic text-[var(--color-text-muted)]" : "",
+                                    "whitespace-normal break-normal leading-6",
+                                  ].join(" ")}
+                                  title={row.title}
+                                >
+                                  {hasSavedPath ? renderPathWithSlashBreaks(row.value) : row.value}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p
+                              className={[
+                                "min-w-0 max-w-[62%] truncate text-right text-[14px] font-medium text-[var(--color-text-heading)]",
+                                row.isMono ? "font-mono text-sm" : "font-sans",
+                                row.isMutedItalic ? "italic text-[var(--color-text-muted)]" : "",
+                                row.isTabular ? "tabular-nums" : "",
+                              ].join(" ")}
+                              title={row.title}
+                            >
+                              {row.value}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -342,6 +441,7 @@ export function DrawerDetailMode({
           {!isTimelineLoading && !isTimelineError && (timeline?.length ?? 0) > 0 ? (
             <div className="space-y-3">
               {timeline!.map((event, index) => {
+                const isFirstEntry = index === 0;
                 const isLastEntry = index === timeline!.length - 1;
                 const isFirstDownload = isLastEntry && event.status === "new";
                 const dotColorClass =
@@ -363,17 +463,16 @@ export function DrawerDetailMode({
                     }}
                   >
                     <div className="relative flex justify-center">
-                      {timeline!.length > 1 && !isLastEntry ? (
+                      {timeline!.length > 1 && !isFirstEntry ? (
                         <span
-                          className="absolute top-1/2 bottom-[-12px] left-1/2 w-0.5 -translate-x-1/2 bg-[var(--color-border)]"
+                          className="absolute top-0 bottom-1/2 left-1/2 w-0.5 -translate-x-1/2 bg-[var(--color-border)]"
                           aria-hidden
                         />
                       ) : null}
 
-                      {timeline!.length > 1 && isLastEntry ? (
+                      {timeline!.length > 1 && !isLastEntry ? (
                         <span
-                          className="absolute top-0 left-1/2 w-0.5 -translate-x-1/2 bg-[var(--color-border)]"
-                          style={{ height: "50%" }}
+                          className="absolute top-1/2 bottom-[-12px] left-1/2 w-0.5 -translate-x-1/2 bg-[var(--color-border)]"
                           aria-hidden
                         />
                       ) : null}
@@ -460,6 +559,21 @@ function formatDateTime(iso: string): string {
 function formatDuration(durationMs: number): string {
   if (durationMs < 1000) return `${durationMs}ms`;
   return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
+function renderPathWithSlashBreaks(path: string): ReactNode[] {
+  return path.split(/([\\/])/).map((part, index) => {
+    if (part === "\\" || part === "/") {
+      return (
+        <span key={`${part}-${index}`}>
+          {part}
+          <wbr />
+        </span>
+      );
+    }
+
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
 }
 
 function TimelineSkeleton() {

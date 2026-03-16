@@ -125,7 +125,10 @@ export const DownloadEventRepository = {
 
     if (options.status) match.status = options.status;
     if (options.isRemoved !== undefined) match.isRemoved = options.isRemoved;
-    if (options.search) match.filename = new RegExp(options.search, "i");
+    if (options.search) {
+      const escapedSearch = options.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      match.filename = new RegExp(escapedSearch, "i");
+    }
     if (options.domain) {
       const escapedDomain = options.domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       match.sourceDomain = new RegExp(`^${escapedDomain}$`, "i");
@@ -384,6 +387,43 @@ export const DownloadEventRepository = {
     return result[0]?.totalSize ?? 0;
   },
 
+  async getActiveTotalSize(userId: string): Promise<number> {
+    const result = await DownloadEvent.aggregate<{ totalSize?: number }>([
+      {
+        $match: {
+          userId: new Types.ObjectId(userId),
+          isRemoved: false,
+        },
+      },
+      {
+        $lookup: {
+          from: "files",
+          localField: "fileId",
+          foreignField: "_id",
+          as: "fileDoc",
+        },
+      },
+      {
+        $unwind: {
+          path: "$fileDoc",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSize: {
+            $sum: {
+              $ifNull: ["$fileDoc.size", 0],
+            },
+          },
+        },
+      },
+    ]).exec();
+
+    return result[0]?.totalSize ?? 0;
+  },
+
   async markRemovalFailed(
     input: MarkRemovalFailedInput,
   ): Promise<IDownloadEvent | null> {
@@ -454,12 +494,18 @@ export const DownloadEventRepository = {
     const results = await DownloadEvent.aggregate<{
       _id: Types.ObjectId;
       dupCount: number;
+      activeDupCount: number;
     }>([
       { $match: { userId: new Types.ObjectId(userId), status: "duplicate" } },
       {
         $group: {
           _id: "$fileId",
           dupCount: { $sum: 1 },
+          activeDupCount: {
+            $sum: {
+              $cond: [{ $eq: ["$isRemoved", false] }, 1, 0],
+            },
+          },
         },
       },
       { $sort: { dupCount: -1 } },
@@ -487,7 +533,7 @@ export const DownloadEventRepository = {
         fileId: String(r._id),
         filename: file?.filename ?? "Unknown file",
         dupCount: r.dupCount,
-        totalSize: (file?.size ?? 0) * r.dupCount,
+        totalSize: (file?.size ?? 0) * r.activeDupCount,
       };
     });
   },

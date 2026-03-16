@@ -5,6 +5,7 @@ import { downloadKeys } from '@/api/useDownloads';
 import type { UserDownloadMetrics } from '@/api/downloads.api';
 import type {
   MetricsDeltaPayload,
+  RemoveFilePayload,
 } from '@/types/shared/websocket.types';
 
 /**
@@ -55,6 +56,24 @@ export function useDownloadsLive() {
       });
     };
 
+    // Event 2b: Backend requested file removal (immediate or grace-period execution)
+    const handleRemoveFile = (_data: RemoveFilePayload) => {
+      queryClient.invalidateQueries({ queryKey: downloadKeys.recent() });
+      queryClient.invalidateQueries({ queryKey: downloadKeys.duplicates() });
+      queryClient.invalidateQueries({ queryKey: downloadKeys.stats() });
+      queryClient.invalidateQueries({ queryKey: downloadKeys.categories() });
+      queryClient.invalidateQueries({ queryKey: downloadKeys.domains() });
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          return (
+            Array.isArray(query.queryKey) &&
+            query.queryKey[0] === 'downloads' &&
+            query.queryKey[1] === 'events'
+          );
+        },
+      });
+    };
+
     // Event 3: Metrics delta (optional optimization — direct cache update)
     const handleMetricsDelta = (data: MetricsDeltaPayload) => {
       // Directly update stats cache without refetch
@@ -70,12 +89,14 @@ export function useDownloadsLive() {
     // Register event listeners
     socket.on('dashboard:download:new', handleDownloadNew);
     socket.on('dashboard:download:updated', handleDownloadUpdated);
+    socket.on('remove:file', handleRemoveFile);
     socket.on('dashboard:metrics:delta', handleMetricsDelta);
 
     // Cleanup on unmount
     return () => {
       socket.off('dashboard:download:new', handleDownloadNew);
       socket.off('dashboard:download:updated', handleDownloadUpdated);
+      socket.off('remove:file', handleRemoveFile);
       socket.off('dashboard:metrics:delta', handleMetricsDelta);
     };
   }, [socket, isConnected, queryClient]);
