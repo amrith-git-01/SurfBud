@@ -570,11 +570,15 @@ export function DownloadRoutingSection({
   if (isLoading) {
     return (
       <section>
-        <p className="section-label">DOWNLOAD ROUTING</p>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Map file categories to subfolders in your Downloads directory.
-        </p>
-        <div className="card-metric-glass mt-3 p-5">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+            Download routing
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Map file categories to subfolders in your Downloads directory.
+          </p>
+        </div>
+        <div className="card-metric-glass mt-4 p-5">
           <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
               <div className="skeleton h-4 w-44 rounded" />
@@ -590,12 +594,16 @@ export function DownloadRoutingSection({
 
   return (
     <section>
-      <p className="section-label">DOWNLOAD ROUTING</p>
-      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-        Map file categories to subfolders in your Downloads directory.
-      </p>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+          Download routing
+        </h3>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          Map file categories to subfolders in your Downloads directory.
+        </p>
+      </div>
 
-      <div className="card-metric-glass mt-3 p-5">
+      <div className="card-metric-glass mt-4 p-5">
         <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
           <div>
             <p className="text-sm font-semibold text-[var(--color-text-heading)]">Auto-route Downloads</p>

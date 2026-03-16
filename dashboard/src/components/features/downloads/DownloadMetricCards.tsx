@@ -19,7 +19,12 @@ export function DownloadMetricCards({ onCardClick }: DownloadMetricCardsProps) {
   if (isError) {
     return (
       <section className="mb-12">
-        <p className="section-label-with-gap">OVERVIEW</p>
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-gray-900">Overview Cards</h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Snapshot of download volume, duplicate count, and storage impact.
+          </p>
+        </div>
         <div
           className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6"
           style={{ boxShadow: "var(--shadow-glass)" }}
@@ -53,7 +58,12 @@ export function DownloadMetricCards({ onCardClick }: DownloadMetricCardsProps) {
 
   return (
     <section className="mb-12">
-      <p className="section-label-with-gap">OVERVIEW CARDS</p>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-900">Overview Cards</h3>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          Snapshot of download volume, duplicate count, and storage impact.
+        </p>
+      </div>
       <div className="grid grid-cols-5 gap-4">
         <MetricCard
           label="TODAY'S DOWNLOADS"

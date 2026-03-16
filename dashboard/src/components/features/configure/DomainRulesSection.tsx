@@ -165,11 +165,15 @@ export function DomainRulesSection({
   if (isLoading) {
     return (
       <section>
-        <p className="section-label">DOMAIN RULES</p>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Define per-domain behavior for tracking and auto-removal.
-        </p>
-        <div className="card-metric-glass p-5 mt-3 h-[320px]">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+            Domain rules
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Define per-domain behavior for tracking and auto-removal.
+          </p>
+        </div>
+        <div className="card-metric-glass p-5 mt-4 h-[320px]">
           <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="space-y-3">
               <div className="skeleton h-8 w-full rounded" />
@@ -189,12 +193,16 @@ export function DomainRulesSection({
 
   return (
     <section>
-      <p className="section-label">DOMAIN RULES</p>
-      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-        Define per-domain behavior for tracking and auto-removal.
-      </p>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+          Domain rules
+        </h3>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          Define per-domain behavior for tracking and auto-removal.
+        </p>
+      </div>
 
-      <div className="card-metric-glass p-5 mt-3 h-[320px]">
+      <div className="card-metric-glass p-5 mt-4 h-[320px]">
         <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-2">
           <div className="flex h-full flex-col">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_190px_auto] sm:items-center">

@@ -32,7 +32,12 @@ export function DownloadHealthBars({ onFilterClick }: DownloadHealthBarsProps) {
 
   return (
     <section>
-      <p className="section-label-with-gap">DOWNLOAD HEALTH BARS</p>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-900">Download Health Bars</h3>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          Compare healthy vs duplicate patterns across count and storage usage.
+        </p>
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         {/* Downloads Health */}
@@ -204,7 +209,12 @@ export function DownloadHealthBars({ onFilterClick }: DownloadHealthBarsProps) {
 function DownloadHealthBarsSkeleton() {
   return (
     <section>
-      <p className="section-label-with-gap">DOWNLOAD HEALTH BARS</p>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-900">Download Health Bars</h3>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          Compare healthy vs duplicate patterns across count and storage usage.
+        </p>
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="card-metric-glass">
