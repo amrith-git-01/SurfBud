@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 export interface LoginFormData {
   email: string;
   password: string;
+  timezone?: string;
 }
 
 interface LoginFormErrors {
@@ -52,7 +53,11 @@ export function LoginForm({
       return;
     }
     setErrors({});
-    onSubmit({ email, password });
+    onSubmit({
+      email,
+      password,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
   }
 
   function handleReset(): void {

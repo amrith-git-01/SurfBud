@@ -72,6 +72,9 @@ export default function AuthPage() {
     pathname === "/register" ? "register" : "login";
 
   const [activeTab, setActiveTab] = useState<Tab>(tabFromPath);
+  const [animClass, setAnimClass] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Already authenticated — redirect to dashboard
   useEffect(() => {
@@ -80,18 +83,7 @@ export default function AuthPage() {
     }
   }, [userId, navigate]);
 
-  if (userId) {
-    return (
-      <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center">
-        <div className="skeleton w-24 h-4 rounded" />
-      </div>
-    );
-  }
-  const [animClass, setAnimClass] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Sync with URL
+  // Sync with URL (must run before any early return to keep hook count consistent)
   useEffect(() => {
     const next = tabFromPath();
     if (next === activeTab) return;
@@ -138,6 +130,7 @@ export default function AuthPage() {
         displayName: data.displayName,
         email: data.email,
         password: data.password,
+        ...(data.timezone && { timezone: data.timezone }),
       });
       setAuth({
         accessToken: result.accessToken,
@@ -156,7 +149,12 @@ export default function AuthPage() {
     }
   }
 
-  return (
+  // Single return with conditional content — no early return, so hook count is always consistent (avoids "fewer hooks" in concurrent/StrictMode)
+  return userId ? (
+    <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center">
+      <div className="skeleton w-24 h-4 rounded" />
+    </div>
+  ) : (
     <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
       <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-stretch">
         {/* Left column: Welcome (hidden on mobile; mobile shows wordmark above card) */}
