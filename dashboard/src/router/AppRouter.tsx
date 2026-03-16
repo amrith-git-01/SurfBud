@@ -4,6 +4,7 @@ import { AuthGuard } from "../components/AuthGuard";
 import { DashboardLayout } from "../components/layout/DashboardLayout";
 import { DashboardPage } from "../pages/DashboardPage";
 import { DownloadsPage } from "../pages/DownloadsPage";
+import { ConfigurePage } from "../pages/ConfigurePage";
 import { BrowsingPage } from "../pages/BrowsingPage";
 import { ReportsPage } from "../pages/ReportsPage";
 import { SettingsPage } from "../pages/SettingsPage";
@@ -28,6 +29,7 @@ export function AppRouter() {
       >
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/downloads" element={<DownloadsPage />} />
+        <Route path="/downloads/configure" element={<ConfigurePage />} />
         <Route path="/browsing" element={<BrowsingPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
