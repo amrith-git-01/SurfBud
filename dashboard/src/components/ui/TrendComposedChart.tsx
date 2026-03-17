@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { Dropdown } from "./Dropdown";
 import { ChartTooltip } from "./ChartTooltip";
+import { SkeletonBlock } from "@/components/skeletons/SkeletonBlock";
 import { formatTrendChartDayLabel } from "@/utils/formatDuration";
 
 export type TrendPeriod = 7 | 15 | 30;
@@ -67,18 +68,37 @@ const DEFAULT_PERIOD_OPTIONS: { value: TrendPeriod; label: string }[] = [
   { value: 30, label: "Last 30 days" },
 ];
 
-function ChartSkeleton() {
+function ChartSkeleton({ hideHeading = false }: { hideHeading?: boolean }) {
   return (
-    <div className="chart-glass w-full p-6 animate-pulse">
+    <div className="chart-glass w-full p-6 h-[420px] flex flex-col">
       <div className="flex items-center justify-between mb-8">
-        <div className="h-4 w-40 bg-[var(--color-border)] rounded" />
-        <div className="h-8 w-32 bg-[var(--color-border)] rounded-md" />
+        {!hideHeading ? (
+          <SkeletonBlock className="h-4 w-40 rounded" />
+        ) : (
+          <div />
+        )}
+        <SkeletonBlock className="h-8 w-32 rounded-md" />
       </div>
-      <div className="h-[280px] w-full bg-[var(--color-bg-inset)] rounded-xl" />
+      <div className="h-[280px] w-full overflow-hidden rounded-xl">
+        <div className="flex h-full items-end gap-2">
+          <SkeletonBlock className="h-[42%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[58%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[66%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[74%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[52%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[68%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[80%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[62%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[76%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[54%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[64%] w-full rounded-t-md" />
+          <SkeletonBlock className="h-[72%] w-full rounded-t-md" />
+        </div>
+      </div>
       <div className="mt-6 flex justify-center gap-6">
-        <div className="h-3 w-24 bg-[var(--color-border)] rounded" />
-        <div className="h-3 w-24 bg-[var(--color-border)] rounded" />
-        <div className="h-3 w-24 bg-[var(--color-border)] rounded" />
+        <SkeletonBlock className="h-3 w-24 rounded" />
+        <SkeletonBlock className="h-3 w-24 rounded" />
+        <SkeletonBlock className="h-3 w-24 rounded" />
       </div>
     </div>
   );
@@ -118,7 +138,7 @@ export function TrendComposedChart({
 }: TrendComposedChartProps) {
   const [line1, line2] = lineSeries;
 
-  if (isLoading) return <ChartSkeleton />;
+  if (isLoading) return <ChartSkeleton hideHeading={hideHeading} />;
 
   if (isError) {
     return (
