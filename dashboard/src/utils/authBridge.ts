@@ -2,6 +2,10 @@ import type {
   DownloadSettings,
   DownloadSettingsSyncPayload,
 } from '../types/shared/download-settings.types';
+import type {
+  BrowsingSettings,
+  BrowsingSettingsSyncPayload,
+} from '../types/shared/browsing-settings.types';
 
 export function notifyExtensionAuth(
   accessToken: string,
@@ -29,6 +33,24 @@ export function notifyExtensionSettingsSync(settings: DownloadSettings): void {
       payload,
     },
     "*",
+  );
+}
+
+export function notifyExtensionBrowsingSettingsSync(
+  settings: BrowsingSettings,
+): void {
+  const payload: BrowsingSettingsSyncPayload = {
+    settings,
+    syncedAt: new Date().toISOString(),
+    source: 'dashboard',
+  };
+
+  window.postMessage(
+    {
+      type: 'SURFBUD_BROWSING_SETTINGS_SYNC',
+      payload,
+    },
+    '*',
   );
 }
 
