@@ -1,5 +1,5 @@
 # SurfBud — Browsing Page API Spec
-**Version 1.1 · Phase 1 · March 2026**
+**Version 1.0 · Phase 1 · March 2026**
 
 ---
 
@@ -50,7 +50,7 @@ Dynamic category definitions — seeded on first deployment, expandable without 
 interface BrowsingCategory {
   _id:              ObjectId
   name:             string    // 'Development'
-  slug:             string    // 'development' — unique, URL safe, used as FK everywhere
+  slug:             string    // 'development' — unique, URL safe
   icon:             string    // lucide-react icon name: 'Code'
   color:            string    // hex: '#7C3AED'
   productivityType: 'productive' | 'distracting' | 'neutral'
@@ -67,13 +67,6 @@ interface BrowsingCategory {
 BrowsingCategorySchema.index({ slug: 1 }, { unique: true })
 BrowsingCategorySchema.index({ isActive: 1, sortOrder: 1 })
 ```
-
-**Why slug as FK (not _id):**
-`BrowsingCategory` is a static seeded lookup table — the 20 categories are defined once
-at deployment and never change identity. Using slug as the FK gives readable documents,
-removes extra round-trips when resolving Groq responses, and makes the extension settings
-payload human-readable. `_id` as FK is correct for mutable user-created references.
-Slug is correct for immutable configuration tables.
 
 **Seeded categories (20 total):**
 
@@ -93,31 +86,29 @@ Slug is correct for immutable configuration tables.
 | `food` | Food & Recipes | neutral | UtensilsCrossed |
 | `government` | Government & Legal | neutral | Landmark |
 | `religion` | Religion & Spirituality | neutral | Sun |
-| `other` | Other | neutral | Globe |
 | `social-media` | Social Media | distracting | Users |
 | `video` | Video | distracting | Play |
 | `music` | Music & Audio | distracting | Music |
 | `gaming` | Gaming | distracting | Gamepad2 |
 | `shopping` | Shopping | distracting | ShoppingCart |
+| `other` | Other | neutral | Globe |
 
 ---
 
 ### 3.2 DomainClassification
 
-Shared across all users. One document per domain. Powers the domain knowledge base —
-grows automatically as users browse. All classification is done by Groq in an hourly
-batch job.
+Shared across all users. One document per domain. Powers the domain knowledge base — grows automatically as users browse.
 
 ```typescript
 interface DomainClassification {
   _id:           ObjectId
-  domain:        string              // FULL subdomain: mail.google.com
-  label:         string              // 'Gmail'
-  description:   string              // 'Email service by Google' — one sentence, from Groq
-  categorySlug:  string              // 'communication' — ref: BrowsingCategory.slug
-  confidence:    'pending' | 'ai'   // see states below
-  verifiedCount: number              // increments each time any user visits this domain
-  classifiedAt:  string | null       // ISO — null while pending
+  domain:        string    // FULL subdomain: mail.google.com
+  label:         string    // 'Gmail'
+  description:   string    // 'Email service by Google' — one sentence, from Groq
+  categorySlug:  string    // 'communication' — ref: BrowsingCategory.slug
+  confidence:    'pending' | 'ai'
+  verifiedCount: number    // increments each time any user visits
+  classifiedAt:  string | null
   updatedAt:     string
 }
 ```
@@ -125,17 +116,13 @@ interface DomainClassification {
 **Indexes:**
 ```typescript
 DomainClassificationSchema.index({ domain: 1 }, { unique: true })
-DomainClassificationSchema.index({ confidence: 1 })  // find all pending docs for hourly batch
+DomainClassificationSchema.index({ confidence: 1 })  // find pending docs
 ```
 
 **Confidence states:**
 ```
-pending  → domain seen for the first time, Groq not yet called
-           categorySlug temporarily set to 'other'
-           dashboard shows "(being classified...)"
-
-ai       → classified by Groq in the hourly batch job
-           label, description, categorySlug all populated
+pending  → domain seen, Groq not yet called (waiting for hourly batch)
+ai       → Groq classified it
 
 Note: user_verified (manual override) is deferred to Phase 2.
       Do not add it to the schema or enum until that feature is built.
@@ -145,32 +132,32 @@ Note: user_verified (manual override) is deferred to Phase 2.
 
 ### 3.3 BrowsingSession
 
-Raw session record — one document per completed browsing session per user. TTL 90 days.
+Raw session record — one document per completed browsing session. TTL 90 days.
 
 ```typescript
 interface BrowsingSession {
   _id:    ObjectId
   userId: ObjectId
 
-  // Domain info — resolved from DomainClassification at write time
-  domain:           string    // full subdomain: mail.google.com
+  // Domain
+  domain:           string    // mail.google.com — full subdomain
   label:            string    // 'Gmail'
-  categorySlug:     string    // 'communication' — ref: BrowsingCategory.slug
+  categorySlug:     string    // 'communication'
   productivityType: 'productive' | 'distracting' | 'neutral'
 
   // Time
-  startedAt:  string    // ISO
+  startedAt:  string    // ISO — in user's timezone context
   endedAt:    string    // ISO
-  activeTime: number    // seconds of actual active time (excludes idle)
+  activeTime: number    // seconds of actual active time
   timezone:   string    // IANA — user's timezone at session time
 
-  // Metadata flags
-  sessionId:     string    // UUID — generated in extension, used for dedup
-  isPassive:     boolean   // true for YouTube, Netflix, Spotify etc
-  isMicro:       boolean   // activeTime < 60s — stored but hidden from feed
-  wasContinuous: boolean   // no domain switches interrupted this session
-  isMerged:      boolean   // this session absorbed one or more follow-up visits
-  mergedFrom:    string[]  // sessionIds merged into this one
+  // Metadata
+  sessionId:      string    // UUID — generated in extension, for dedup
+  isPassive:      boolean   // true for YouTube etc
+  isMicro:        boolean   // activeTime < 60s — hidden from feed
+  wasContinuous:  boolean   // no domain switches during session
+  isMerged:       boolean   // was merged from multiple raw sessions
+  mergedFrom:     string[]  // sessionIds merged into this one
 
   createdAt: string
   updatedAt: string
@@ -189,41 +176,33 @@ BrowsingSessionSchema.index(
 )
 ```
 
-**Key rules enforced at write time:**
-- Sessions under 60s → `isMicro: true` — counted in metrics, hidden from UI feed
-- Same domain, gap < 5 mins, same calendar day → merge into previous session
-- Never merge sessions across midnight (user's local timezone boundary)
-- `wasContinuous: false` on any merged session — the gap disqualifies it from deep focus
-
 ---
 
 ### 3.4 UserBrowsingMetrics
 
-Pre-materialized metrics — one document per user. Never calculated on demand.
-Updated atomically by BullMQ worker after each session batch.
-Same pattern as `UserDownloadMetrics`.
+Pre-materialized metrics — one document per user. Never calculated on demand. Updated by BullMQ worker after each batch. Same pattern as `UserDownloadMetrics`.
 
 ```typescript
 interface UserBrowsingMetrics {
   _id:    ObjectId
-  userId: ObjectId
+  userId: ObjectId   // unique index
 
   // ─── Today ────────────────────────────────────────────────
   today: {
     totalActiveTime:     number        // seconds
-    sitesVisited:        number        // unique domains today
-    topSite:             string | null // domain e.g. 'github.com'
+    sitesVisited:        number        // unique domains
+    topSite:             string | null // domain
     topSiteLabel:        string | null // 'GitHub'
     topSiteTime:         number        // seconds on top site
-    focusScore:          number | null // 0–100, null when no data (show — not 0)
+    focusScore:          number | null // 0-100 or null if no data
     longestSession:      number        // seconds
     longestSessionStart: string | null // ISO
     longestSessionEnd:   string | null // ISO
     productiveTime:      number        // seconds
     distractingTime:     number        // seconds
     neutralTime:         number        // seconds
-    contextSwitches:     number        // domain changes, excludes micro sessions
-    deepFocusSessions:   number        // sessions ≥ 30 mins AND wasContinuous = true
+    contextSwitches:     number
+    deepFocusSessions:   number        // continuous sessions > 30 mins
     topCategorySlug:     string | null
   }
 
@@ -255,7 +234,7 @@ interface UserBrowsingMetrics {
     longestSession:   number
   }
 
-  // ─── Previous periods — used for delta arrows on metric cards ─
+  // ─── Previous periods for delta calculations ──────────────
   prev: {
     todayTotalTime:      number
     todayFocusScore:     number | null
@@ -289,46 +268,34 @@ const defaultBrowsingMetrics = {
     distractingTime: 0, neutralTime: 0,
     contextSwitches: 0, deepFocusSessions: 0, topCategorySlug: null
   },
-  week: {
-    totalActiveTime: 0, sitesVisited: 0, focusScore: null,
-    productiveTime: 0, distractingTime: 0, neutralTime: 0,
-    topSite: null, topSiteLabel: null, topCategorySlug: null,
-    longestSession: 0
-  },
-  month: {
-    totalActiveTime: 0, sitesVisited: 0, focusScore: null,
-    productiveTime: 0, distractingTime: 0, neutralTime: 0,
-    topSite: null, topSiteLabel: null, topCategorySlug: null,
-    longestSession: 0
-  },
-  prev: {
-    todayTotalTime: 0, todayFocusScore: null,
-    todaySitesVisited: 0, todayLongestSession: 0,
-    todayProductiveTime: 0, weekTotalTime: 0,
-    weekFocusScore: null, monthTotalTime: 0,
-    monthFocusScore: null
-  }
+  week:  { totalActiveTime: 0, sitesVisited: 0, focusScore: null,
+           productiveTime: 0, distractingTime: 0, neutralTime: 0,
+           topSite: null, topSiteLabel: null, topCategorySlug: null,
+           longestSession: 0 },
+  month: { totalActiveTime: 0, sitesVisited: 0, focusScore: null,
+           productiveTime: 0, distractingTime: 0, neutralTime: 0,
+           topSite: null, topSiteLabel: null, topCategorySlug: null,
+           longestSession: 0 },
+  prev:  { todayTotalTime: 0, todayFocusScore: null,
+           todaySitesVisited: 0, todayLongestSession: 0,
+           todayProductiveTime: 0, weekTotalTime: 0,
+           weekFocusScore: null, monthTotalTime: 0,
+           monthFocusScore: null }
 }
 ```
-
-**Critical rules:**
-- `focusScore` is `null` (not 0) when `productiveTime + distractingTime === 0`
-- `prev.*` fields written only at midnight rollover — always hold previous period's final value
-- All updates use atomic `$inc` / `$set` — never read-modify-write
 
 ---
 
 ### 3.5 BrowsingDailyStats
 
-One document per user per day. Pre-aggregated daily totals.
-Powers the 7/15/30 day trend chart. Never deleted — retained permanently for long-term history.
+Pre-aggregated daily stats — one document per user per day. Powers the 7/15/30 day chart. Never deleted (keeps full history for long-term trends).
 
 ```typescript
 interface BrowsingDailyStats {
-  _id:      ObjectId
-  userId:   ObjectId
-  date:     string    // 'YYYY-MM-DD' in user's local timezone
-  timezone: string    // IANA
+  _id:    ObjectId
+  userId: ObjectId
+  date:   string    // 'YYYY-MM-DD' in user's local timezone
+  timezone: string  // IANA
 
   totalActiveTime:   number
   productiveTime:    number
@@ -336,7 +303,7 @@ interface BrowsingDailyStats {
   neutralTime:       number
   focusScore:        number | null
   sitesVisited:      number
-  longestSession:    number        // seconds
+  longestSession:    number
   contextSwitches:   number
   deepFocusSessions: number
 
@@ -347,30 +314,29 @@ interface BrowsingDailyStats {
 
 **Indexes:**
 ```typescript
-BrowsingDailyStatsSchema.index({ userId: 1, date: -1 })             // range queries
-BrowsingDailyStatsSchema.index({ userId: 1, date: 1 }, { unique: true })  // upsert key
+BrowsingDailyStatsSchema.index({ userId: 1, date: -1 })
+BrowsingDailyStatsSchema.index({ userId: 1, date: 1 }, { unique: true })
 ```
 
 ---
 
 ### 3.6 BrowsingCategoryStats
 
-One document per user per category per day.
-Powers the "Time by Category" panel (Section 3 right).
+Pre-aggregated category breakdown per user per day. Powers Section 3 right panel.
 
 ```typescript
 interface BrowsingCategoryStats {
-  _id:          ObjectId
-  userId:       ObjectId
-  date:         string    // 'YYYY-MM-DD'
-  timezone:     string    // IANA
-  categorySlug: string    // ref: BrowsingCategory.slug
+  _id:         ObjectId
+  userId:      ObjectId
+  date:        string    // 'YYYY-MM-DD'
+  timezone:    string    // IANA
+  categorySlug: string   // 'development'
 
-  totalActiveTime: number   // seconds in this category today
-  sitesVisited:    number   // unique domains in this category today
-  topDomain:       string | null
-  topDomainLabel:  string | null
-  topDomainTime:   number   // seconds on the top domain in this category
+  totalActiveTime:  number
+  sitesVisited:     number
+  topDomain:        string | null
+  topDomainLabel:   string | null
+  topDomainTime:    number
 
   createdAt: string
   updatedAt: string
@@ -382,7 +348,7 @@ interface BrowsingCategoryStats {
 BrowsingCategoryStatsSchema.index({ userId: 1, date: -1 })
 BrowsingCategoryStatsSchema.index(
   { userId: 1, date: 1, categorySlug: 1 },
-  { unique: true }   // upsert key
+  { unique: true }
 )
 ```
 
@@ -390,8 +356,7 @@ BrowsingCategoryStatsSchema.index(
 
 ### 3.7 BrowsingDomainStats
 
-One document per user per domain per day.
-Powers the "Top Sites" panel (Section 3 left).
+Pre-aggregated per domain per user per day. Powers Section 3 left panel (top sites).
 
 ```typescript
 interface BrowsingDomainStats {
@@ -402,12 +367,12 @@ interface BrowsingDomainStats {
 
   domain:           string
   label:            string
-  categorySlug:     string   // ref: BrowsingCategory.slug
+  categorySlug:     string
   productivityType: 'productive' | 'distracting' | 'neutral'
 
-  totalActiveTime: number   // seconds on this domain today
-  visitCount:      number   // number of sessions on this domain today
-  longestSession:  number   // seconds — longest single session today
+  totalActiveTime: number
+  visitCount:      number
+  longestSession:  number
 
   createdAt: string
   updatedAt: string
@@ -419,28 +384,11 @@ interface BrowsingDomainStats {
 BrowsingDomainStatsSchema.index({ userId: 1, date: -1 })
 BrowsingDomainStatsSchema.index(
   { userId: 1, date: 1, domain: 1 },
-  { unique: true }   // upsert key
+  { unique: true }
 )
 BrowsingDomainStatsSchema.index(
-  { userId: 1, date: 1, totalActiveTime: -1 }   // sorted top-sites query
+  { userId: 1, date: 1, totalActiveTime: -1 }
 )
-```
-
----
-
-## Schema Relationship Map
-
-```
-BrowsingCategory          ← seeded once, static at runtime, slug is the FK everywhere
-      ↑ categorySlug
-DomainClassification      ← shared knowledge base, grows as users browse
-      ↑ resolved at write time (domain lookup → label + categorySlug)
-BrowsingSession           ← raw event log, TTL 90 days
-      ↓ aggregated by browsing-metrics.worker after each batch
-      ├── UserBrowsingMetrics    ← one doc per user      → metric cards
-      ├── BrowsingDailyStats     ← one doc per user/day  → trend chart
-      ├── BrowsingCategoryStats  ← one doc per user/category/day → category panel
-      └── BrowsingDomainStats    ← one doc per user/domain/day   → top sites
 ```
 
 ---
@@ -476,8 +424,9 @@ No sessions at all         → focusScore: null → show —
 
 ## 5. API Endpoints
 
-### 5.1 GET /api/browsing/categories
+### 5.1 Categories
 
+#### GET /api/browsing/categories
 Returns all active categories sorted by sortOrder. Cached in Redis — 1 hour TTL.
 
 **Response:**
@@ -491,7 +440,6 @@ Returns all active categories sorted by sortOrder. Cached in Redis — 1 hour TT
       "icon": "Code",
       "color": "#7C3AED",
       "productivityType": "productive",
-      "description": "Coding, version control, deployment",
       "sortOrder": 2
     }
   ]
@@ -500,9 +448,10 @@ Returns all active categories sorted by sortOrder. Cached in Redis — 1 hour TT
 
 ---
 
-### 5.2 GET /api/browsing/metrics
+### 5.2 Metrics
 
-Returns pre-materialized `UserBrowsingMetrics` for the authenticated user.
+#### GET /api/browsing/metrics
+Returns pre-materialized UserBrowsingMetrics for the authenticated user. Same pattern as `GET /downloads/metrics`.
 
 **Response:**
 ```json
@@ -533,9 +482,17 @@ Returns pre-materialized `UserBrowsingMetrics` for the authenticated user.
 
 ---
 
-### 5.3 POST /api/browsing/events/batch
+### 5.3 Sessions
 
-Receives batch of completed sessions from extension. Extension flushes every 5 minutes.
+#### POST /api/browsing/sessions/batch
+Receives a batch of completed sessions from the extension queue.
+
+**Extension push cadence (implemented):**
+- Primary schedule: local top-of-hour boundaries (12:00, 1:00, 2:00, ...)
+- Alarm anchor: extension local timezone (browser/system timezone)
+- Startup/install behavior: immediate flush attempt is also executed
+- Alarm handler behavior: re-schedules the next top-of-hour alarm, then flushes
+- Retry behavior for transient failures: 2s, 5s, 12s backoff
 
 **Request body:**
 ```typescript
@@ -557,8 +514,8 @@ For each session in batch:
 1. Check sessionId → already exists? Skip (idempotent)
 2. Sort all sessions by startedAt (chronological order)
 3. Check domain in DomainClassification
-   → Found (confidence: ai)  → use label + description + categorySlug
-   → Not found               → create pending record, use 'other' temporarily
+   → Found → use label + categorySlug
+   → Not found → create pending record, schedule classification
 4. Get productivityType from BrowsingCategory via categorySlug
 5. Check session merging:
    → Find recent session same domain same day
@@ -572,44 +529,47 @@ For each session in batch:
 
 **Response:**
 ```json
-{ "success": true, "processed": 8, "skipped": 2 }
+{
+  "success": true,
+  "data": {
+    "accepted": 8,
+    "upserted": 6,
+    "modified": 2
+  }
+}
 ```
 
 ---
 
-### 5.4 GET /api/browsing/sessions
-
-Paginated session history. Powers the "View all activity" drawer.
+#### GET /api/browsing/sessions
+Paginated list of completed sessions for the authenticated user. Powers the "View all activity" drawer.
 
 **Query params:**
 ```
 page:     number   default 1
-limit:    number   default 20, max 50
-from:     string   ISO date
-to:       string   ISO date
-domain:   string   filter by domain
-category: string   filter by categorySlug
+limit:    number   default 10, max 50
+period:   today|week|month|all   optional
+date:     YYYY-MM-DD              optional
+from:     ISO datetime            optional (requires to)
+to:       ISO datetime            optional (requires from)
+domain:   string                  optional
+excludeDomains: string[]          optional
+categorySlug: string              optional
+productivityType: productive|distracting|neutral   optional
+sort:     newest|oldest|longest   default newest
 ```
+
+**Validation rule:** use only one scope selector at a time:
+- `period`
+- `date`
+- `from + to`
 
 ---
 
-### 5.5 GET /api/browsing/sessions/recent
+### 5.4 Chart Data
 
-Recent non-micro sessions for the activity feed.
-
-**Query params:**
-```
-limit: number   default 10
-date:  string   'YYYY-MM-DD' default today
-```
-
-Filters: `isMicro: false` only. Sorted by `endedAt` descending.
-
----
-
-### 5.6 GET /api/browsing/stats/daily
-
-Daily stats for the trend chart.
+#### GET /api/browsing/stats/daily
+Returns daily stats for the chart. Period: 7, 15, or 30 days.
 
 **Query params:**
 ```
@@ -636,9 +596,10 @@ period: 7 | 15 | 30   default 7
 
 ---
 
-### 5.7 GET /api/browsing/stats/domains
+### 5.5 Top Sites
 
-Top domains for today or a specific date. Powers the Top Sites panel.
+#### GET /api/browsing/stats/domains
+Returns top domains for today or a specific date.
 
 **Query params:**
 ```
@@ -666,9 +627,10 @@ limit: number   default 10
 
 ---
 
-### 5.8 GET /api/browsing/stats/categories
+### 5.6 Category Stats
 
-Category breakdown for today or a specific date. Powers the Time by Category panel.
+#### GET /api/browsing/stats/categories
+Returns category breakdown for today or a specific date.
 
 **Query params:**
 ```
@@ -698,12 +660,26 @@ date: string   'YYYY-MM-DD' default today
 
 ---
 
+### 5.7 Recent Activity Feed
+
+#### GET /api/browsing/sessions/recent
+Returns recent non-micro completed sessions for the feed.
+
+**Query params:**
+```
+limit: number   default 10
+date:  string   'YYYY-MM-DD' default today
+```
+
+Filters: `isMicro: false` only. Sorted by `endedAt` descending.
+
+---
+
 ## 6. BullMQ Workers
 
 ### 6.1 Browsing Metrics Worker
 
-Triggered after each session batch is saved. Updates all four pre-materialized
-collections atomically. All operations use `$inc` / `$max` — never read-modify-write.
+Triggered after each batch of sessions is saved. Updates all pre-materialized documents atomically.
 
 ```typescript
 // api/src/workers/browsing-metrics.worker.ts
@@ -721,6 +697,9 @@ export const browsingMetricsWorker = new Worker(
       new Date(s.startedAt) >= today
     )
 
+    // All updates atomic — never read-modify-write
+    // Always use $inc, $max for race condition safety
+
     // Update UserBrowsingMetrics
     await UserBrowsingMetricsModel.updateOne(
       { userId },
@@ -736,10 +715,15 @@ export const browsingMetricsWorker = new Worker(
           'today.longestSession': maxSession(todaySessions).activeTime
         },
         $set: {
-          'today.focusScore':   calculateFocusScore(productive, distracting),
+          'today.focusScore': calculateFocusScore(
+            productive, distracting
+          ),
           'today.topSite':      topSite.domain,
           'today.topSiteLabel': topSite.label,
           updatedAt: new Date().toISOString()
+        },
+        $addToSet: {
+          // Track unique domains — use Redis set for efficiency
         }
       }
     )
@@ -786,10 +770,10 @@ export const browsingMetricsWorker = new Worker(
 ### 6.2 Browsing Midnight Rollup Worker
 
 Reuses the same pattern as Downloads rollup. Uses the same `active:timezones` Redis set.
-Runs every 30 minutes — same cron as download rollup.
 
 ```typescript
 // api/src/workers/browsing-rollup.worker.ts
+// Runs every 30 minutes — same cron as download rollup
 
 async function rolloverBrowsingMetrics(userId: string): Promise<void> {
   const metrics = await UserBrowsingMetricsRepository.findByUserId(userId)
@@ -806,21 +790,21 @@ async function rolloverBrowsingMetrics(userId: string): Promise<void> {
         'prev.todayProductiveTime': metrics.today.productiveTime,
 
         // Reset today to zero
-        'today.totalActiveTime':     0,
-        'today.sitesVisited':        0,
-        'today.topSite':             null,
-        'today.topSiteLabel':        null,
-        'today.topSiteTime':         0,
-        'today.focusScore':          null,
-        'today.longestSession':      0,
+        'today.totalActiveTime':   0,
+        'today.sitesVisited':      0,
+        'today.topSite':           null,
+        'today.topSiteLabel':      null,
+        'today.topSiteTime':       0,
+        'today.focusScore':        null,
+        'today.longestSession':    0,
         'today.longestSessionStart': null,
         'today.longestSessionEnd':   null,
-        'today.productiveTime':      0,
-        'today.distractingTime':     0,
-        'today.neutralTime':         0,
-        'today.contextSwitches':     0,
-        'today.deepFocusSessions':   0,
-        'today.topCategorySlug':     null,
+        'today.productiveTime':    0,
+        'today.distractingTime':   0,
+        'today.neutralTime':       0,
+        'today.contextSwitches':   0,
+        'today.deepFocusSessions': 0,
+        'today.topCategorySlug':   null,
         updatedAt: new Date().toISOString()
       }
     }
@@ -832,8 +816,7 @@ async function rolloverBrowsingMetrics(userId: string): Promise<void> {
 
 ### 6.3 Domain Classification Worker
 
-Runs every 1 hour. Finds all `confidence: 'pending'` domains, batches them into a
-single Groq call. Skips entirely if no pending domains — no wasted API calls.
+Runs every 1 hour. Finds all pending domains, batches them into a single Groq call. Skips entirely if no pending domains.
 
 ```typescript
 // api/src/workers/domain-classification.worker.ts
@@ -841,26 +824,31 @@ single Groq call. Skips entirely if no pending domains — no wasted API calls.
 export const classificationCronWorker = new Worker(
   'domain-classification-cron',
   async () => {
+    // Find all pending domains
     const pending = await DomainClassificationModel
       .find({ confidence: 'pending' })
       .lean()
 
     if (!pending.length) {
       logger.info('No pending domains — skipping Groq call')
-      return   // ← early return, zero API cost
+      return   // ← skip API call entirely if nothing to classify
     }
 
     logger.info(`Classifying ${pending.length} domains via Groq`)
 
+    // Single Groq call for all pending domains
     const results = await classifyDomainsWithGroq(
       pending.map(d => d.domain)
     )
 
+    // Update each classified domain
     for (const result of results) {
+      // Validate with Zod — skip if invalid category
       const parsed = ClassificationResultSchema.safeParse(result)
       if (!parsed.success) {
+        // Retry once with single domain call
         const retry = await classifySingleDomain(result.domain)
-        if (!retry) continue  // fallback stays as 'other'
+        if (!retry) continue  // fallback to Other
       }
 
       await DomainClassificationModel.updateOne(
@@ -874,13 +862,6 @@ export const classificationCronWorker = new Worker(
           updatedAt:    new Date().toISOString()
         }
       )
-
-      // Notify dashboard — update "Other" labels in real time
-      io.to(`user:*`).emit('browsing:domain:classified', {
-        domain:       result.domain,
-        label:        result.label,
-        categorySlug: result.categorySlug
-      })
     }
   },
   { connection: redis }
@@ -908,7 +889,7 @@ async function classifyDomainsWithGroq(
       For each domain provide:
       - domain: exact domain as given
       - label: human readable name (e.g. "GitHub" for github.com)
-      - description: one sentence describing what the site does
+      - description: one sentence describing what the site does (e.g. "Code hosting and version control platform")
       - categorySlug: exactly one slug from the list above
 
       Domains:
@@ -917,7 +898,7 @@ async function classifyDomainsWithGroq(
       Reply ONLY with valid JSON array:
       [{"domain":"github.com","label":"GitHub","description":"Code hosting and version control platform","categorySlug":"development"}]`
     }],
-    max_tokens: domains.length * 50,  // ~50 tokens per domain including description
+    max_tokens: domains.length * 50,  // increased — description adds ~20 tokens per domain
     temperature: 0   // deterministic
   })
 
@@ -946,10 +927,12 @@ async function mergeSessions(
 ): Promise<void> {
   const MERGE_GAP_MS = 5 * 60 * 1000  // 5 minutes
 
+  // Find most recent session for same domain
   const recent = await BrowsingSessionRepository
     .findMostRecent(userId, incoming.domain)
 
   if (!recent) {
+    // No previous session → create new
     await createSession(userId, incoming, timezone)
     return
   }
@@ -957,20 +940,27 @@ async function mergeSessions(
   const gap = new Date(incoming.startedAt).getTime() -
               new Date(recent.endedAt).getTime()
 
-  const recentDay   = getDateString(recent.endedAt, timezone)
+  // Check day boundary — never merge across midnight
+  const recentDay = getDateString(recent.endedAt, timezone)
   const incomingDay = getDateString(incoming.startedAt, timezone)
-  const sameDay     = recentDay === incomingDay
+  const sameDay = recentDay === incomingDay
 
   if (gap <= MERGE_GAP_MS && sameDay) {
+    // Merge into existing session
     await BrowsingSessionModel.updateOne(
       { _id: recent._id },
       {
-        $set:  { endedAt: incoming.endedAt, isMerged: true, wasContinuous: false },
-        $inc:  { activeTime: incoming.activeTime },
+        $set: {
+          endedAt:     incoming.endedAt,
+          isMerged:    true,
+          wasContinuous: false,  // interrupted by gap
+        },
+        $inc: { activeTime: incoming.activeTime },
         $push: { mergedFrom: incoming.sessionId }
       }
     )
   } else {
+    // Gap too large or different day → new session
     await createSession(userId, incoming, timezone)
   }
 }
@@ -980,10 +970,12 @@ async function mergeSessions(
 
 ```typescript
 const IGNORED_DOMAINS = new Set([
-  'newtab', 'chrome', 'extensions', 'settings', 'about', 'blank'
+  'newtab', 'chrome', 'extensions',
+  'settings', 'about', 'blank'
 ])
 
 function isValidDomain(domain: string): boolean {
+  // Filter chrome:// about:blank extension:// localhost
   if (IGNORED_DOMAINS.has(domain)) return false
   if (domain.startsWith('192.168.')) return false
   if (domain === 'localhost') return false
@@ -993,8 +985,8 @@ function isValidDomain(domain: string): boolean {
 function countContextSwitches(sessions: BrowsingSession[]): number {
   return sessions
     .filter(s => isValidDomain(s.domain))
-    .filter(s => !s.isMicro)
-    .length - 1   // n sessions = n-1 switches
+    .filter(s => !s.isMicro)  // micro visits don't count as switches
+    .length - 1  // n sessions = n-1 switches
 }
 ```
 
@@ -1006,7 +998,7 @@ const DEEP_FOCUS_THRESHOLD_SECONDS = 30 * 60  // 30 minutes
 function countDeepFocusSessions(sessions: BrowsingSession[]): number {
   return sessions.filter(s =>
     s.activeTime >= DEEP_FOCUS_THRESHOLD_SECONDS &&
-    s.wasContinuous === true   // must be truly uninterrupted
+    s.wasContinuous === true  // must be truly uninterrupted
   ).length
 }
 ```
@@ -1014,13 +1006,14 @@ function countDeepFocusSessions(sessions: BrowsingSession[]): number {
 ### 7.4 Duplicate Prevention
 
 ```typescript
+// Before inserting any session
 const existing = await BrowsingSessionModel
   .findOne({ sessionId: incoming.sessionId })
   .lean()
 
 if (existing) {
   logger.info('Duplicate session skipped', { sessionId: incoming.sessionId })
-  return   // idempotent — skip silently
+  return  // idempotent — skip silently
 }
 ```
 
@@ -1030,6 +1023,7 @@ if (existing) {
 
 **Reuse `date.utils.ts` from Downloads — do not duplicate.**
 
+All timezone-sensitive operations:
 ```typescript
 // Start of today in user's timezone
 const startOfToday = getStartOfDay(user.timezone)
@@ -1037,7 +1031,7 @@ const startOfToday = getStartOfDay(user.timezone)
 // Date string for daily stats
 const dateStr = DateTime.now()
   .setZone(user.timezone)
-  .toISODate()   // 'YYYY-MM-DD'
+  .toISODate()  // 'YYYY-MM-DD'
 
 // Midnight boundary check for session merging
 const sessionDay = DateTime.fromISO(session.startedAt)
@@ -1054,14 +1048,13 @@ const sessionDay = DateTime.fromISO(session.startedAt)
 | `browsing:metrics:updated` | `{ type, userId, delta }` | Pushed after each batch processed |
 | `browsing:domain:classified` | `{ type, userId, domain, label, categorySlug }` | Pushed when Groq classifies a pending domain |
 
-`browsing:domain:classified` allows the dashboard to update "(being classified...)"
-labels in real time — from "Other" to the correct category — without a page refresh.
+The `browsing:domain:classified` event allows the dashboard to update category labels in real time without a page refresh — from "Other" to the correct category.
 
 ---
 
 ## 10. Passive Domains
 
-Hardcoded list — idle detection disabled for these domains. Timer runs continuously.
+Hardcoded list — idle detection disabled for these domains:
 
 ```typescript
 export const PASSIVE_DOMAINS = new Set([
@@ -1083,12 +1076,14 @@ export const PASSIVE_DOMAINS = new Set([
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/browsing/categories` | All active categories (Redis cached 1h) |
-| `GET` | `/browsing/metrics` | Pre-materialized user metrics |
-| `POST` | `/browsing/events/batch` | Receive session batch from extension |
+| `GET` | `/browsing/category-catalog` | All active categories (cached) |
+| `GET` | `/browsing/categories` | Category stats rows for selected period/date |
+| `GET` | `/browsing/domains` | Domain stats rows for selected period/date |
+| `GET` | `/browsing/stats` | Pre-materialized user metrics |
+| `POST` | `/browsing/sessions/batch` | Receive session batch from extension |
 | `GET` | `/browsing/sessions` | Paginated session history |
-| `GET` | `/browsing/sessions/recent` | Recent activity feed |
-| `GET` | `/browsing/stats/daily` | Daily stats for chart (7/15/30 days) |
+| `GET` | `/browsing/trend` | Daily trend buckets for chart (7/15/30 days) |
+| `GET` | `/browsing/stats/timeline` | 30-min timeline blocks for a date |
 | `GET` | `/browsing/stats/domains` | Top domains for date |
 | `GET` | `/browsing/stats/categories` | Category breakdown for date |
 
@@ -1106,7 +1101,7 @@ export const PASSIVE_DOMAINS = new Set([
 | 6 | Multiple tabs same domain | Track by domain not tabId |
 | 7 | Focus score no data | Returns null → shown as — on dashboard |
 | 8 | Session ordering | Sort by startedAt before processing |
-| 9 | Deep focus + merged sessions | wasContinuous flag required |
+| 9 | Deep focus + merged sessions | wasContinuous flag required for deep focus |
 | 10 | Data retention | TTL index 90 days on BrowsingSession |
 | 11 | Extension disabled | chrome.management.onDisabled → flush |
 | 12 | Groq invalid category | Zod validation + single retry + Other fallback |
@@ -1117,5 +1112,155 @@ export const PASSIVE_DOMAINS = new Set([
 
 ---
 
-*SurfBud · Browsing API Spec · v1.1 · March 2026*
-*Changes from v1.0: DomainClassification — added description field, trimmed confidence to pending|ai only, deferred user_verified to Phase 2*
+---
+
+## 13. Browsing Detail Drawer — API Requirements
+
+### 13.1 Overview
+
+The Browsing Detail Drawer requires an extended version of `GET /api/browsing/sessions`
+with filter, sort, and pagination params. The current endpoint only supports `limit`.
+
+---
+
+### 13.2 Extended Sessions Endpoint
+
+```
+GET /api/browsing/sessions
+```
+
+**All query params (add to `BrowsingListQuerySchema` or new schema):**
+
+```typescript
+// Zod schema — api/src/schemas/browsing.schemas.ts
+export const BrowsingDrawerQuerySchema = z.object({
+  page:             z.coerce.number().int().positive().default(1),
+  limit:            z.coerce.number().int().positive().max(50).default(10),
+  date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from:             z.string().datetime().optional(),
+  to:               z.string().datetime().optional(),
+  domain:           z.string().optional(),
+  categorySlug:     z.string().optional(),
+  productivityType: z.enum(['productive','distracting','neutral']).optional(),
+  sort:             z.enum(['newest','oldest','longest']).default('newest'),
+  period:           z.enum(['today','week','month','all']).optional(),
+})
+```
+
+**Filter logic (apply in repository):**
+
+```
+date        → filter sessions where startedAt falls within that calendar day (user TZ)
+from + to   → filter sessions where startedAt >= from AND endedAt <= to (timeline block)
+domain      → filter by exact domain match
+categorySlug → join DomainClassification, filter by categorySlug
+productivityType → join DomainClassification → BrowsingCategory, filter by productivityType
+period      → today / week / month / all (same as existing stats period logic, user TZ)
+sort=newest  → sort by startedAt DESC
+sort=oldest  → sort by startedAt ASC
+sort=longest → sort by durationSeconds DESC
+```
+
+**Pagination:**
+
+```
+skip = (page - 1) * limit
+Return total count for "Page N of M" display
+```
+
+**Response envelope:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "sessions": [
+      {
+        "_id": "...",
+        "sessionId": "...",
+        "domain": "github.com",
+        "startedAt": "...",
+        "endedAt": "...",
+        "durationSeconds": 600,
+        "interactions": { "keypresses": 45, "clicks": 12, "scrollEvents": 8 },
+        "label": "GitHub",
+        "domainLogo": "https://...",
+        "domainColor": "#181717",
+        "categorySlug": "development",
+        "productivityType": "productive"
+      }
+    ],
+    "total": 24,
+    "page": 1,
+    "totalPages": 3
+  }
+}
+```
+
+Note: `productivityType` is resolved at read time from `DomainClassification` →
+`BrowsingCategory`, same as the existing `getRecent` join logic in
+`BrowsingSessionService`. Reuse that join — do not duplicate it.
+
+---
+
+### 13.3 Drawer Trigger → API Param Mapping
+
+| Trigger | Params passed |
+|---|---|
+| TIME ONLINE card | `period=today&sort=newest` |
+| SITES VISITED card | Uses `GET /stats/domains?period=today` — no sessions endpoint needed |
+| TOP SITE card | `period=today&domain={topSite}&sort=newest` |
+| FOCUS SCORE card | `period=today&productivityType=productive&sort=longest` |
+| LONGEST SESSION card | `period=today&sort=longest` |
+| Chart bar click | `date=YYYY-MM-DD&sort=newest` |
+| Site breakdown row | `domain={domain}&period={selectedPeriod}&sort=newest` |
+| Category breakdown row | `categorySlug={slug}&period={selectedPeriod}&sort=longest` |
+| Timeline block click | `from={block.startIso}&to={block.endIso}&sort=newest` |
+| Recent feed row click | Single session — no sessions endpoint, use existing session data from feed |
+
+---
+
+### 13.4 Single Session Detail
+
+The single session detail view (recent feed row click) does **not** need a new endpoint.
+The data is already in the session object returned by `GET /sessions`:
+
+```
+durationSeconds  → format to "21m 47s"
+startedAt        → format time range "7:54 – 8:16 AM"
+startedAt        → format date "Today, Mar 22 2026"
+label            → site label
+domain           → raw domain
+categorySlug     → resolve to category name via BrowsingCategory catalog
+productivityType → dot + label
+interactions     → { keypresses, clicks, scrollEvents }
+```
+
+All fields already present in the `GET /sessions` response — the drawer just renders
+the clicked row's data, no additional fetch needed.
+
+---
+
+### 13.5 Implementation Order
+
+```
+1. Extend BrowsingListQuerySchema → BrowsingDrawerQuerySchema
+2. Update BrowsingSessionRepository.findPaginated() with all filter + sort params
+3. Update BrowsingSessionService.getFiltered() to call repository + join classification
+4. Update browsing.controller.ts getSessions handler to use new schema
+5. Test each drawer trigger with its param combination
+6. Frontend: implement BrowsingDrawer.tsx + useBrowsingDrawerSessions.ts hook
+```
+
+---
+
+### 13.6 Changelog Addition
+
+| Version | Notes |
+|---------|--------|
+| 1.3 | Added Section 13 — Browsing Detail Drawer API: extended sessions endpoint, drawer trigger → param mapping, single session detail, implementation order |
+
+---
+
+*SurfBud · Browsing API Spec · v1.3 · March 2026*
+*Added: Section 13 — Browsing Detail Drawer API requirements*
