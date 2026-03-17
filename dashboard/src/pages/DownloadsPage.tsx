@@ -16,6 +16,7 @@ import { useDownloadSettings } from "@/api/useDownloads";
 import {
   FileDetailDrawer,
   type DrawerDetailView,
+  type DrawerEventSelectionMode,
   type DrawerListPreset,
   type DrawerMode,
 } from "../components/features/downloads/FileDetailDrawer";
@@ -30,6 +31,7 @@ interface DrawerOpenState {
   fileId: string | null;
   eventId: string | null;
   detailView: DrawerDetailView;
+  eventSelectionMode: DrawerEventSelectionMode;
   canGoBack: boolean;
   listPreset: DrawerListPreset;
 }
@@ -43,27 +45,29 @@ const PRESET_BY_CARD: Record<
   "today" | "week" | "month" | "total" | "wasted",
   DrawerListPreset
 > = {
-  today: { title: "Today's Downloads", period: "today" },
-  week: { title: "This Week", period: "week" },
-  month: { title: "This Month", period: "month" },
-  total: { title: "All Downloads", period: "all" },
+  today: { title: "Today's Downloads", period: "today", sort: "newest" },
+  week: { title: "This Week", period: "week", sort: "newest" },
+  month: { title: "This Month", period: "month", sort: "newest" },
+  total: { title: "All Downloads", period: "all", sort: "newest" },
   wasted: {
     title: "Storage Wasted",
     period: "all",
+    sort: "newest",
     status: "duplicate",
     isRemoved: false,
   },
 };
 
 const PRESET_BY_HEALTH_TARGET: Record<HealthBarsClickTarget, DrawerListPreset> = {
-  "total-files": { title: "All Downloads", period: "all" },
-  "new-files": { title: "New Downloads", period: "all", status: "new" },
-  "duplicate-files": { title: "Duplicate Downloads", period: "all", status: "duplicate" },
-  "total-size": { title: "All Downloads", period: "all" },
-  "used-size": { title: "Used Storage (New Files)", period: "all", status: "new" },
+  "total-files": { title: "All Downloads", period: "all", sort: "newest" },
+  "new-files": { title: "New Downloads", period: "all", sort: "newest", status: "new" },
+  "duplicate-files": { title: "Duplicate Downloads", period: "all", sort: "newest", status: "duplicate" },
+  "total-size": { title: "All Downloads", period: "all", sort: "newest" },
+  "used-size": { title: "Used Storage (New Files)", period: "all", sort: "newest", status: "new" },
   "wasted-size": {
     title: "Wasted Storage (Duplicates)",
     period: "all",
+    sort: "newest",
     status: "duplicate",
     isRemoved: false,
   },
@@ -81,6 +85,7 @@ export function DownloadsPage() {
     fileId: null,
     eventId: null,
     detailView: "details",
+    eventSelectionMode: "newest",
     canGoBack: false,
     listPreset: DEFAULT_LIST_PRESET,
   });
@@ -92,6 +97,7 @@ export function DownloadsPage() {
       fileId: null,
       eventId: null,
       detailView: "details",
+      eventSelectionMode: "newest",
       canGoBack: false,
       listPreset: preset,
     });
@@ -103,6 +109,7 @@ export function DownloadsPage() {
       eventId?: string;
       canGoBack?: boolean;
       detailView?: DrawerDetailView;
+      eventSelectionMode?: DrawerEventSelectionMode;
       listPreset?: DrawerListPreset;
     },
   ) => {
@@ -112,6 +119,7 @@ export function DownloadsPage() {
       fileId,
       eventId: options?.eventId ?? null,
       detailView: options?.detailView ?? "details",
+      eventSelectionMode: options?.eventSelectionMode ?? "newest",
       canGoBack: options?.canGoBack ?? true,
       listPreset: options?.listPreset ?? previous.listPreset,
     }));
@@ -195,7 +203,7 @@ export function DownloadsPage() {
                     listPreset: {
                       title: `File Details: ${filename}`,
                       period: "all",
-                      search: filename,
+                      search: eventId,
                       date: toIsoDate(createdAt),
                     },
                   })
@@ -210,20 +218,11 @@ export function DownloadsPage() {
           onFilterClick={(target) => openListDrawer(PRESET_BY_HEALTH_TARGET[target])}
         />
         <DuplicateGroups
-          onOpenTimeline={({ fileId, filename }) => {
-            if (fileId) {
-              openDetailDrawer(fileId, {
-                canGoBack: false,
-                detailView: "timeline",
-              });
-              return;
-            }
-
-            openListDrawer({
-              title: "Duplicate Files",
-              period: "all",
-              status: "duplicate",
-              search: filename,
+          onOpenTimeline={({ fileId }) => {
+            openDetailDrawer(fileId, {
+              canGoBack: false,
+              detailView: "timeline",
+              eventSelectionMode: "original",
             });
           }}
         />
@@ -267,6 +266,7 @@ export function DownloadsPage() {
         initialFileId={drawer.fileId}
         initialEventId={drawer.eventId}
         initialDetailView={drawer.detailView}
+        initialEventSelectionMode={drawer.eventSelectionMode}
         initialCanGoBack={drawer.canGoBack}
         initialListPreset={drawer.listPreset}
       />
