@@ -21,3 +21,8 @@ export interface StoredBrowsingState {
   openSession?: OpenSession;
   closedSessions: ExtensionSession[];
 }
+
+/** API batch ingest body — keep in sync with api/src/types/shared/browsing.types.ts */
+export interface BrowsingSessionBatchPayload {
+  sessions: ExtensionSession[];
+}

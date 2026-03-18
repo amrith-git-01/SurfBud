@@ -10,8 +10,10 @@ import {
   handleTabBecameActive,
   closeCurrentSession,
   ensureBrowsingBatchAlarm,
+  flushBrowsingSessionsQueue,
   handleAlarm as handleBrowsingAlarm,
   finalizeOrphanedSessionOnStartup,
+  recordInteraction,
 } from "./browsingSession";
 import type {
   DownloadSettings,
@@ -19,14 +21,54 @@ import type {
   DownloadRuleValue,
   FileCategory,
 } from "../types/shared/download-settings.types";
+import type {
+  BrowsingSettings,
+  BrowsingSettingsSyncPayload,
+} from "../types/shared/browsing-settings.types";
 
 const API_BASE = "http://localhost:3001/api";
 const SOCKET_BASE = API_BASE.endsWith("/api")
   ? API_BASE.slice(0, -4)
   : API_BASE;
+
+/** Matches `GET /api/health` on the API — poll until HTTP server listens (after Redis/DB bootstrap). */
+const SOCKET_HEALTH_PATH = "/api/health";
+/** Polling first avoids websocket-only failures; keep attempts low to reduce console noise. */
+const SOCKET_RECONNECT_ATTEMPTS = 3;
+const SOCKET_RECONNECT_DELAY_MS = 5000;
+const SOCKET_RECONNECT_DELAY_MAX_MS = 30000;
+/** Backstop if the API was down — retries socket without tight reconnect loops. */
+const SOCKET_RECONNECT_ALARM = "surfbud-socket-reconnect";
+const SOCKET_RECONNECT_ALARM_MINUTES = 15;
+
+async function waitForApiHealth(baseUrl: string): Promise<boolean> {
+  const url = `${baseUrl.replace(/\/$/, "")}${SOCKET_HEALTH_PATH}`;
+  let delayMs = 200;
+  const maxDelayMs = 4000;
+  const maxAttempts = 20;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, { method: "GET", cache: "no-store" });
+      if (res.ok) {
+        return true;
+      }
+    } catch {
+      /* connection refused until server listens */
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, delayMs);
+    });
+    delayMs = Math.min(Math.floor(delayMs * 1.35), maxDelayMs);
+  }
+
+  return false;
+}
 const AUTH_STORAGE_KEY = "authToken";
 const SETTINGS_STORAGE_KEY = "downloadSettings";
 const SETTINGS_SYNCED_AT_STORAGE_KEY = "downloadSettingsSyncedAt";
+const BROWSING_SETTINGS_STORAGE_KEY = "browsingSettings";
+const BROWSING_SETTINGS_SYNCED_AT_STORAGE_KEY = "browsingSettingsSyncedAt";
 
 const DEFAULT_SETTINGS: DownloadSettings = {
   trackingEnabled: true,
@@ -36,6 +78,14 @@ const DEFAULT_SETTINGS: DownloadSettings = {
   routingEnabled: false,
   domainRules: [],
   routingFolders: [],
+};
+
+const DEFAULT_BROWSING_SETTINGS: BrowsingSettings = {
+  trackingEnabled: true,
+  interactionTrackingEnabled: true,
+  minSessionDurationSeconds: 10,
+  mergeGapSeconds: 30,
+  domainRules: [],
 };
 
 const RETRY_DELAYS_MS = [2000, 4000, 8000] as const;
@@ -74,10 +124,24 @@ interface SettingsSyncMessage {
   payload: DownloadSettingsSyncPayload;
 }
 
+interface BrowsingSettingsSyncMessage {
+  type: "BROWSING_SETTINGS_SYNC";
+  payload: BrowsingSettingsSyncPayload;
+}
+
+interface BrowsingInteractionMessage {
+  type: "BROWSING_INTERACTION";
+  payload: {
+    kind: "key" | "click" | "scroll";
+  };
+}
+
 type RuntimeMessage =
   | AuthSuccessMessage
   | AuthLogoutMessage
-  | SettingsSyncMessage;
+  | SettingsSyncMessage
+  | BrowsingSettingsSyncMessage
+  | BrowsingInteractionMessage;
 
 let removalSocket: Socket | null = null;
 let activeSocketToken: string | null = null;
@@ -325,6 +389,47 @@ async function syncDownloadSettingsFromApi(token: string): Promise<void> {
   }
 }
 
+async function persistBrowsingSettings(
+  payload: BrowsingSettingsSyncPayload,
+): Promise<void> {
+  await chrome.storage.sync.set({
+    [BROWSING_SETTINGS_STORAGE_KEY]: payload.settings,
+    [BROWSING_SETTINGS_SYNCED_AT_STORAGE_KEY]: payload.syncedAt,
+  });
+}
+
+async function syncBrowsingSettingsFromApi(token: string): Promise<void> {
+  try {
+    const response = await fetchWithRetry(`${API_BASE}/browsing/settings`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      data?: BrowsingSettings;
+    };
+
+    if (!data.success) {
+      return;
+    }
+
+    await persistBrowsingSettings({
+      settings: data.data ?? DEFAULT_BROWSING_SETTINGS,
+      syncedAt: new Date().toISOString(),
+      source: "extension-fetch",
+    });
+  } catch {
+    // Ignore sync failures and keep existing cached settings.
+  }
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -441,7 +546,17 @@ function disconnectRemovalSocket(): void {
   activeSocketToken = null;
 }
 
-function connectRemovalSocket(token: string): void {
+async function ensureSocketReconnectAlarm(): Promise<void> {
+  await chrome.alarms.create(SOCKET_RECONNECT_ALARM, {
+    periodInMinutes: SOCKET_RECONNECT_ALARM_MINUTES,
+  });
+}
+
+async function clearSocketReconnectAlarm(): Promise<void> {
+  await chrome.alarms.clear(SOCKET_RECONNECT_ALARM);
+}
+
+async function connectRemovalSocket(token: string): Promise<void> {
   if (
     removalSocket &&
     activeSocketToken === token &&
@@ -452,18 +567,32 @@ function connectRemovalSocket(token: string): void {
 
   disconnectRemovalSocket();
 
+  const reachable = await waitForApiHealth(SOCKET_BASE);
+  if (!reachable) {
+    await ensureSocketReconnectAlarm();
+    console.warn(
+      "SurfBud: API not reachable; removal socket will retry on schedule.",
+    );
+    return;
+  }
+
   const socket = io(SOCKET_BASE, {
     auth: { token },
-    transports: ["websocket"],
+    transports: ["polling", "websocket"],
     withCredentials: true,
     reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 8000,
+    reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
+    reconnectionDelay: SOCKET_RECONNECT_DELAY_MS,
+    reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX_MS,
+    randomizationFactor: 0.5,
   });
 
   socket.on("remove:file", (payload: RemoveFilePayload) => {
     void handleRemoveFileEvent(token, payload);
+  });
+
+  socket.io.on("reconnect_failed", () => {
+    void ensureSocketReconnectAlarm();
   });
 
   removalSocket = socket;
@@ -474,11 +603,13 @@ async function bootstrapSocketConnection(): Promise<void> {
   const token = await getAuthToken();
   if (!token) {
     disconnectRemovalSocket();
+    await clearSocketReconnectAlarm();
     return;
   }
 
   await syncDownloadSettingsFromApi(token);
-  connectRemovalSocket(token);
+  await syncBrowsingSettingsFromApi(token);
+  await connectRemovalSocket(token);
 }
 
 chrome.runtime.onMessage.addListener(
@@ -492,7 +623,8 @@ chrome.runtime.onMessage.addListener(
         })
         .then(async () => {
           await syncDownloadSettingsFromApi(msg.payload.token);
-          connectRemovalSocket(msg.payload.token);
+          await syncBrowsingSettingsFromApi(msg.payload.token);
+          await connectRemovalSocket(msg.payload.token);
           sendResponse({ ok: true });
         });
     } else if (msg.type === "SETTINGS_SYNC" && msg.payload) {
@@ -503,8 +635,20 @@ chrome.runtime.onMessage.addListener(
         }
         sendResponse({ ok: true });
       });
+    } else if (msg.type === "BROWSING_SETTINGS_SYNC" && msg.payload) {
+      persistBrowsingSettings(msg.payload).then(async () => {
+        const token = await getAuthToken();
+        if (token) {
+          await syncBrowsingSettingsFromApi(token);
+        }
+        sendResponse({ ok: true });
+      });
     } else if (msg.type === "AUTH_LOGOUT") {
       disconnectRemovalSocket();
+      void clearSocketReconnectAlarm();
+      sendResponse({ ok: true });
+    } else if (msg.type === "BROWSING_INTERACTION" && msg.payload) {
+      void recordInteraction(msg.payload.kind);
       sendResponse({ ok: true });
     } else {
       sendResponse({ ok: false });
@@ -517,7 +661,22 @@ void bootstrapSocketConnection();
 void (async () => {
   await finalizeOrphanedSessionOnStartup();
   await ensureBrowsingBatchAlarm();
+  await ensureSocketReconnectAlarm();
+  await flushBrowsingSessionsQueue();
 })();
+
+chrome.runtime.onStartup.addListener(() => {
+  void bootstrapSocketConnection();
+  void flushBrowsingSessionsQueue();
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  void (async () => {
+    await ensureBrowsingBatchAlarm();
+    await ensureSocketReconnectAlarm();
+    await flushBrowsingSessionsQueue();
+  })();
+});
 
 async function getAuthToken(): Promise<string | null> {
   return new Promise((resolve) => {
@@ -693,7 +852,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   void (async () => {
     if (alarm.name === "browsing-batch-send") {
       await handleBrowsingAlarm(alarm.name);
+    } else if (alarm.name === SOCKET_RECONNECT_ALARM) {
+      await bootstrapSocketConnection();
     }
-    // if you add other alarms in future (e.g. for downloads), handle them here too
   })();
 });
