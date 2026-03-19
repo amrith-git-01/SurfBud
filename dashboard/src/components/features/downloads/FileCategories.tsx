@@ -1,7 +1,13 @@
 import React, { useState, useMemo, memo } from 'react';
 import { useCategories } from '@/api/useDownloads';
+import {
+  DOWNLOAD_STATS_PERIOD_OPTIONS,
+  type DownloadStatsPeriod,
+} from '@/api/downloads.api';
 import { formatBytes } from '@/utils/formatBytes';
+import { Dropdown } from '@/components/ui/Dropdown';
 import { ViewModeContainer, type ViewModeContainerItem } from '@/components/ui/ViewModeContainer';
+import { AnalyticsPanelSkeleton } from '@/components/skeletons/AnalyticsPanelSkeleton';
 import type { ViewMode } from '@/types/ui.types';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -27,8 +33,18 @@ export const FileCategories: React.FC<FileCategoriesProps> = memo(({
   onCategoryClick,
   onShowAll,
 }) => {
-  const { data: categories, isLoading, isError, refetch } = useCategories();
+  const [period, setPeriod] = useState<DownloadStatsPeriod>('today');
+  const { data: categories, isLoading, isError, refetch } = useCategories({ period });
   const [view, setView] = useState<ViewMode>('list');
+
+  const periodDescription =
+    period === 'today'
+      ? 'today'
+      : period === 'week'
+        ? 'this week'
+        : period === 'month'
+          ? 'this month'
+          : 'all time';
 
   const categoryData = useMemo(() => {
     const predefined = ['document', 'image', 'video', 'text', 'audio', 'archive', 'code', 'executable', 'other'];
@@ -57,6 +73,11 @@ export const FileCategories: React.FC<FileCategoriesProps> = memo(({
   const totalSize = useMemo(() => categoryData.reduce((sum, c) => sum + c.size, 0), [categoryData]);
   const totalNewCount = useMemo(() => categoryData.reduce((sum, c) => sum + c.newValue, 0), [categoryData]);
   const totalDuplicateCount = useMemo(() => categoryData.reduce((sum, c) => sum + c.duplicateValue, 0), [categoryData]);
+
+  const hasCategoryActivity = useMemo(
+    () => categoryData.some((item) => item.value > 0 || item.size > 0),
+    [categoryData],
+  );
 
   const containerData: ViewModeContainerItem[] = useMemo(
     () =>
@@ -95,7 +116,7 @@ export const FileCategories: React.FC<FileCategoriesProps> = memo(({
           <div className="mb-4 px-2">
             <h3 className="text-sm font-semibold text-gray-900">File Analytics</h3>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              Analyze category-level distribution by file count and storage consumption.
+              Analyze category-level distribution by file count and storage consumption for {periodDescription}.
             </p>
           </div>
         )}
@@ -131,26 +152,42 @@ export const FileCategories: React.FC<FileCategoriesProps> = memo(({
         <div className="mb-4 px-2">
           <h3 className="text-sm font-semibold text-gray-900">File Analytics</h3>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Analyze category-level distribution by file count and storage consumption.
+            Analyze category-level distribution by file count and storage consumption for {periodDescription}.
           </p>
         </div>
       )}
       <ViewModeContainer
         view={view}
         onViewChange={setView}
-        data={containerData}
+        data={hasCategoryActivity ? containerData : []}
         title="File Categories"
+        headerLeft={
+          <Dropdown
+            className="shrink-0"
+            value={period}
+            options={DOWNLOAD_STATS_PERIOD_OPTIONS}
+            onChange={setPeriod}
+            align="right"
+            size="md"
+          />
+        }
         valueLabel="Files"
         secondaryLabel="Size"
         formatValue={(n) => n.toLocaleString()}
         formatSecondary={formatBytes}
-        totalRow={totalRow}
-        onTotalClick={handleShowAll}
-        onItemClick={(item) => handleCategoryClick(item.name)}
-        onChartClick={(item) => {
-          if (item.name === 'Total') handleShowAll();
-          else handleCategoryClick(item.name);
-        }}
+        totalRow={hasCategoryActivity ? totalRow : null}
+        onTotalClick={hasCategoryActivity ? handleShowAll : undefined}
+        onItemClick={
+          hasCategoryActivity ? (item) => handleCategoryClick(item.name) : undefined
+        }
+        onChartClick={
+          hasCategoryActivity
+            ? (item) => {
+                if (item.name === 'Total') handleShowAll();
+                else handleCategoryClick(item.name);
+              }
+            : undefined
+        }
         emptyMessage={view === 'list' ? 'No data available' : 'No activity yet. Start downloading to see trends here.'}
         colors={Object.values(CATEGORY_COLORS)}
         minHeight="420px"
@@ -163,22 +200,10 @@ FileCategories.displayName = 'FileCategories';
 
 function FileCategoriesSkeleton() {
   return (
-    <section className="mb-12">
-      <div className="mb-4 px-2">
-        <h3 className="text-sm font-semibold text-gray-900">File Analytics</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Analyze category-level distribution by file count and storage consumption.
-        </p>
-      </div>
-      <div className="chart-glass w-full p-6">
-        <div className="skeleton h-6 w-16 mb-6 rounded" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 mb-4">
-            <div className="skeleton h-2 flex-1 rounded-full" />
-            <div className="skeleton h-4 w-20 rounded" />
-          </div>
-        ))}
-      </div>
-    </section>
+    <AnalyticsPanelSkeleton
+      sectionTitle="File Analytics"
+      sectionDescription="Analyze category-level distribution by file count and storage consumption."
+      className="mb-12"
+    />
   );
 }

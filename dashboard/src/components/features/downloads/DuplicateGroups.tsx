@@ -12,7 +12,7 @@ import { useDuplicateGroups } from "../../../api/useDownloads";
 import { formatBytes } from "../../../utils/formatBytes";
 
 interface DuplicateGroupsProps {
-  onOpenTimeline?: (payload: { fileId?: string; filename: string }) => void;
+  onOpenTimeline?: (payload: { fileId: string; filename: string }) => void;
 }
 
 export function DuplicateGroups({ onOpenTimeline }: DuplicateGroupsProps) {
@@ -71,18 +71,21 @@ export function DuplicateGroups({ onOpenTimeline }: DuplicateGroupsProps) {
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {rows.map((group) => {
               const totalDownloads = group.dupCount + 1;
+              const hasFileId = Boolean(group.fileId);
 
               return (
                 <button
                   key={group.fileId ?? `${group.filename}-${group.dupCount}`}
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
+                    if (!hasFileId) return;
                     onOpenTimeline?.({
-                      fileId: group.fileId,
+                      fileId: group.fileId!,
                       filename: group.filename,
-                    })
-                  }
-                  className="ui-hover-row w-full text-left px-4 py-3 border-b border-[var(--color-border)] last:border-b-0"
+                    });
+                  }}
+                  disabled={!hasFileId}
+                  className="ui-hover-row w-full text-left px-4 py-3 border-b border-[var(--color-border)] last:border-b-0 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <div className="flex items-center gap-3">
                     <FileTypeBadge filename={group.filename} />
@@ -199,19 +202,22 @@ function DuplicateGroupsSkeleton() {
           Group repeated files and open each group to inspect duplicate history.
         </p>
       </div>
-      <div className="chart-glass w-full p-0 overflow-hidden">
-        {Array.from({ length: 3 }).map((_, i) => (
+      <div className="chart-glass w-full p-0 max-h-[420px] flex flex-col overflow-hidden">
+        {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
             className="px-4 py-3 border-b border-[var(--color-border)] last:border-b-0"
           >
             <div className="flex items-center gap-3">
               <div className="skeleton w-8 h-8 rounded-lg" />
-              <div className="skeleton h-3 w-52 rounded" />
+              <div className="min-w-0 flex-1">
+                <div className="skeleton h-3 w-52 rounded" />
+              </div>
               <div className="ml-auto flex items-center gap-4">
                 <div className="skeleton h-3 w-24 rounded" />
                 <div className="skeleton h-3 w-20 rounded" />
                 <div className="skeleton h-3 w-24 rounded" />
+                <div className="skeleton h-4 w-4 rounded" />
               </div>
             </div>
           </div>
