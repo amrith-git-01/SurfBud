@@ -1,7 +1,13 @@
 import React, { useState, useMemo, memo } from 'react';
 import { useDomains } from '@/api/useDownloads';
+import {
+  DOWNLOAD_STATS_PERIOD_OPTIONS,
+  type DownloadStatsPeriod,
+} from '@/api/downloads.api';
 import { formatBytes } from '@/utils/formatBytes';
+import { Dropdown } from '@/components/ui/Dropdown';
 import { ViewModeContainer, type ViewModeContainerItem } from '@/components/ui/ViewModeContainer';
+import { AnalyticsPanelSkeleton } from '@/components/skeletons/AnalyticsPanelSkeleton';
 import type { ViewMode } from '@/types/ui.types';
 
 const SOURCE_COLORS = [
@@ -30,8 +36,18 @@ export const DownloadSources: React.FC<DownloadSourcesProps> = memo(({
   onOthersClick,
   onShowAll,
 }) => {
-  const { data: domains, isLoading, isError, refetch } = useDomains();
+  const [period, setPeriod] = useState<DownloadStatsPeriod>('today');
+  const { data: domains, isLoading, isError, refetch } = useDomains({ period });
   const [view, setView] = useState<ViewMode>('list');
+
+  const periodDescription =
+    period === 'today'
+      ? 'today'
+      : period === 'week'
+        ? 'this week'
+        : period === 'month'
+          ? 'this month'
+          : 'all time';
 
   const sources = useMemo(
     () =>
@@ -87,7 +103,7 @@ export const DownloadSources: React.FC<DownloadSourcesProps> = memo(({
           <div className="mb-4 px-2">
             <h3 className="text-sm font-semibold text-gray-900">Download Sources</h3>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              Compare domains by download count and storage footprint.
+              Compare domains by download count and storage footprint for {periodDescription}.
             </p>
           </div>
         )}
@@ -131,7 +147,7 @@ export const DownloadSources: React.FC<DownloadSourcesProps> = memo(({
         <div className="mb-4 px-2">
           <h3 className="text-sm font-semibold text-gray-900">Download Sources</h3>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Compare domains by download count and storage footprint.
+            Compare domains by download count and storage footprint for {periodDescription}.
           </p>
         </div>
       )}
@@ -140,6 +156,16 @@ export const DownloadSources: React.FC<DownloadSourcesProps> = memo(({
         onViewChange={setView}
         data={containerData}
         title="Domains"
+        headerLeft={
+          <Dropdown
+            className="shrink-0"
+            value={period}
+            options={DOWNLOAD_STATS_PERIOD_OPTIONS}
+            onChange={setPeriod}
+            align="right"
+            size="md"
+          />
+        }
         valueLabel="Downloads"
         secondaryLabel="Size"
         formatValue={(n) => n.toLocaleString()}
@@ -177,22 +203,10 @@ DownloadSources.displayName = 'DownloadSources';
 
 function DownloadSourcesSkeleton() {
   return (
-    <section className="mb-12">
-      <div className="mb-4 px-2">
-        <h3 className="text-sm font-semibold text-gray-900">Download Sources</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Compare domains by download count and storage footprint.
-        </p>
-      </div>
-      <div className="chart-glass w-full p-6">
-        <div className="skeleton h-6 w-16 mb-6 rounded" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 mb-4">
-            <div className="skeleton h-2 flex-1 rounded-full" />
-            <div className="skeleton h-4 w-24 rounded" />
-          </div>
-        ))}
-      </div>
-    </section>
+    <AnalyticsPanelSkeleton
+      sectionTitle="Download Sources"
+      sectionDescription="Compare domains by download count and storage footprint."
+      className="mb-12"
+    />
   );
 }

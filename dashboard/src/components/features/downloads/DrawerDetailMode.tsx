@@ -16,12 +16,18 @@ import {
 import { useFileById, useFileTimeline } from "../../../api/useDownloads";
 import { BackButton } from "../../ui/BackButton";
 import { StatusBadge } from "../../ui/StatusBadge";
+import {
+  DrawerDetailsSkeleton,
+  DrawerTimelineSkeleton,
+} from "@/components/skeletons/DrawerDetailSkeletons";
+import type { DrawerEventSelectionMode } from "./FileDetailDrawer";
 
 export type DrawerDetailView = "details" | "timeline";
 
 interface DrawerDetailModeProps {
   fileId: string | null;
   eventId: string | null;
+  eventSelectionMode: DrawerEventSelectionMode;
   initialView: DrawerDetailView;
   isActive: boolean;
   canGoBack: boolean;
@@ -57,6 +63,7 @@ const DEFAULT_CATEGORY_VISUAL: CategoryVisual = {
 export function DrawerDetailMode({
   fileId,
   eventId,
+  eventSelectionMode,
   initialView,
   isActive,
   canGoBack,
@@ -121,7 +128,11 @@ export function DrawerDetailMode({
   const fileCategory = normalizeCategory(file?.fileCategory);
   const visual = CATEGORY_VISUALS[fileCategory] ?? DEFAULT_CATEGORY_VISUAL;
   const selectedEvent =
-    timeline?.find((event) => event._id === eventId) ?? timeline?.[0] ?? null;
+    timeline?.find((event) => event._id === eventId) ??
+    (eventSelectionMode === "original"
+      ? timeline?.find((event) => event.status === "new") ??
+        (timeline && timeline.length > 0 ? timeline[timeline.length - 1] : null)
+      : timeline?.[0] ?? null);
   const displayFilename = selectedEvent?.filename ?? file?.filename ?? "Unknown file";
   const displaySavedPath =
     selectedEvent?.savedPath?.trim() || file?.savedPath?.trim()
@@ -261,7 +272,7 @@ export function DrawerDetailMode({
 
         {activeView === "details" ? (
           <>
-            {isFileLoading ? <DetailsSkeleton /> : null}
+            {isFileLoading ? <DrawerDetailsSkeleton /> : null}
 
             {!isFileLoading && isFileError ? (
               <div className="py-8 text-center">
@@ -417,7 +428,7 @@ export function DrawerDetailMode({
             Every time this file was downloaded
           </p>
 
-          {isTimelineLoading ? <TimelineSkeleton /> : null}
+          {isTimelineLoading ? <DrawerTimelineSkeleton /> : null}
 
           {!isTimelineLoading && isTimelineError ? (
             <div className="py-8 text-center">
@@ -574,32 +585,6 @@ function renderPathWithSlashBreaks(path: string): ReactNode[] {
 
     return <span key={`${part}-${index}`}>{part}</span>;
   });
-}
-
-function TimelineSkeleton() {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="grid grid-cols-[16px_1fr] gap-3">
-          <div className="relative flex justify-center">
-            <span className="absolute top-[9px] bottom-[-12px] left-1/2 w-0.5 -translate-x-1/2 bg-[var(--color-border)]" />
-            <span className="relative top-1 h-2.5 w-2.5 rounded-full bg-[var(--color-border)]" />
-          </div>
-          <div className="skeleton h-16 w-full rounded-lg" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function DetailsSkeleton() {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="skeleton h-12 w-full rounded-lg" />
-      ))}
-    </div>
-  );
 }
 
 function normalizeCategory(category?: string): string {
