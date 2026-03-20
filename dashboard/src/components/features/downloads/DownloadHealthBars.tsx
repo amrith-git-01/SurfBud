@@ -207,6 +207,35 @@ export function DownloadHealthBars({ onFilterClick }: DownloadHealthBarsProps) {
 }
 
 function DownloadHealthBarsSkeleton() {
+  const CardSkeleton = () => (
+    <div className="card-metric-glass">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <div className="skeleton h-3 w-32 rounded" />
+          <div className="skeleton mt-2 h-3 w-40 rounded" />
+        </div>
+        <div className="flex gap-4">
+          <div className="flex items-center gap-1.5">
+            <div className="skeleton h-2.5 w-2.5 rounded-full" />
+            <div className="skeleton h-3 w-14 rounded" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="skeleton h-2.5 w-2.5 rounded-full" />
+            <div className="skeleton h-3 w-14 rounded" />
+          </div>
+        </div>
+      </div>
+
+      <div className="skeleton mb-3 h-3 w-full rounded-full" />
+
+      <div className="flex justify-end gap-2">
+        <div className="skeleton h-12 w-20 rounded-lg" />
+        <div className="skeleton h-12 w-20 rounded-lg" />
+        <div className="skeleton h-12 w-20 rounded-lg" />
+      </div>
+    </div>
+  );
+
   return (
     <section>
       <div className="mb-4">
@@ -217,26 +246,8 @@ function DownloadHealthBarsSkeleton() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="card-metric-glass">
-          <div className="skeleton h-4 w-32 mb-2"></div>
-          <div className="skeleton h-3 w-48 mb-4"></div>
-          <div className="skeleton h-3 w-full mb-4 rounded-full"></div>
-          <div className="flex gap-2">
-            <div className="skeleton h-12 w-20 rounded-lg"></div>
-            <div className="skeleton h-12 w-20 rounded-lg"></div>
-            <div className="skeleton h-12 w-20 rounded-lg"></div>
-          </div>
-        </div>
-        <div className="card-metric-glass">
-          <div className="skeleton h-4 w-32 mb-2"></div>
-          <div className="skeleton h-3 w-48 mb-4"></div>
-          <div className="skeleton h-3 w-full mb-4 rounded-full"></div>
-          <div className="flex gap-2">
-            <div className="skeleton h-12 w-20 rounded-lg"></div>
-            <div className="skeleton h-12 w-20 rounded-lg"></div>
-            <div className="skeleton h-12 w-20 rounded-lg"></div>
-          </div>
-        </div>
+        <CardSkeleton />
+        <CardSkeleton />
       </div>
     </section>
   );
