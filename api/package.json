@@ -8,7 +8,8 @@
     "start": "node dist/index.ts",
     "type-check": "tsc --noEmit",
     "seed:downloads": "tsx src/scripts/seed-downloads.ts",
-    "clear:data": "tsx src/scripts/clear-data.ts"
+    "clear:data": "tsx src/scripts/clear-data.ts",
+    "seed:browsing-categories": "tsx src/scripts/seed-browsing-categories.ts"
   },
   "keywords": [],
   "author": "",
