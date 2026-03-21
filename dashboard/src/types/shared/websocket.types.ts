@@ -7,7 +7,8 @@ export type ServerEvent =
   | 'dashboard:download:updated'
   | 'dashboard:download:deleted'
   | 'dashboard:metrics:delta'
-  | 'dashboard:connection:ack';
+  | 'dashboard:connection:ack'
+  | 'remove:file';
 
 /** Event payloads */
 export interface DownloadNewPayload {
@@ -43,6 +44,12 @@ export interface ConnectionAckPayload {
   timestamp: string;
 }
 
+export interface RemoveFilePayload {
+  type: 'remove:file';
+  savedPath: string;
+  hash: string;
+}
+
 /** Type-safe event map */
 export interface ServerToClientEvents {
   'dashboard:download:new': (data: DownloadNewPayload) => void;
@@ -50,6 +57,7 @@ export interface ServerToClientEvents {
   'dashboard:download:deleted': (data: DownloadDeletedPayload) => void;
   'dashboard:metrics:delta': (data: MetricsDeltaPayload) => void;
   'dashboard:connection:ack': (data: ConnectionAckPayload) => void;
+  'remove:file': (data: RemoveFilePayload) => void;
 }
 
 export interface ClientToServerEvents {

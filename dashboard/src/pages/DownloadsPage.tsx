@@ -28,6 +28,7 @@ interface DrawerOpenState {
   isOpen: boolean;
   mode: DrawerMode;
   fileId: string | null;
+  eventId: string | null;
   detailView: DrawerDetailView;
   canGoBack: boolean;
   listPreset: DrawerListPreset;
@@ -78,6 +79,7 @@ export function DownloadsPage() {
     isOpen: false,
     mode: "list",
     fileId: null,
+    eventId: null,
     detailView: "details",
     canGoBack: false,
     listPreset: DEFAULT_LIST_PRESET,
@@ -88,6 +90,7 @@ export function DownloadsPage() {
       isOpen: true,
       mode: "list",
       fileId: null,
+      eventId: null,
       detailView: "details",
       canGoBack: false,
       listPreset: preset,
@@ -97,6 +100,7 @@ export function DownloadsPage() {
   const openDetailDrawer = (
     fileId: string,
     options?: {
+      eventId?: string;
       canGoBack?: boolean;
       detailView?: DrawerDetailView;
       listPreset?: DrawerListPreset;
@@ -106,8 +110,9 @@ export function DownloadsPage() {
       isOpen: true,
       mode: "detail",
       fileId,
+      eventId: options?.eventId ?? null,
       detailView: options?.detailView ?? "details",
-      canGoBack: options?.canGoBack ?? false,
+      canGoBack: options?.canGoBack ?? true,
       listPreset: options?.listPreset ?? previous.listPreset,
     }));
   };
@@ -182,8 +187,9 @@ export function DownloadsPage() {
             <div className="col-span-1">
               <RecentDownloadsFeed
                 hideHeading
-                onOpenDetail={({ fileId, filename, createdAt }) =>
+                onOpenDetail={({ eventId, fileId, filename, createdAt }) =>
                   openDetailDrawer(fileId, {
+                    eventId,
                     canGoBack: true,
                     detailView: "details",
                     listPreset: {
@@ -259,6 +265,7 @@ export function DownloadsPage() {
         onClose={closeDrawer}
         initialMode={drawer.mode}
         initialFileId={drawer.fileId}
+        initialEventId={drawer.eventId}
         initialDetailView={drawer.detailView}
         initialCanGoBack={drawer.canGoBack}
         initialListPreset={drawer.listPreset}

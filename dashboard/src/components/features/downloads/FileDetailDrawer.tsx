@@ -38,6 +38,7 @@ interface FileDetailDrawerProps {
   onClose: () => void;
   initialMode: DrawerMode;
   initialFileId: string | null;
+  initialEventId: string | null;
   initialDetailView: DrawerDetailView;
   initialCanGoBack: boolean;
   initialListPreset: DrawerListPreset;
@@ -50,6 +51,7 @@ export function FileDetailDrawer({
   onClose,
   initialMode,
   initialFileId,
+  initialEventId,
   initialDetailView,
   initialCanGoBack,
   initialListPreset,
@@ -60,6 +62,7 @@ export function FileDetailDrawer({
   const [mode, setMode] = useState<DrawerMode>(initialMode);
   const [canGoBack, setCanGoBack] = useState<boolean>(initialCanGoBack);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(initialFileId);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(initialEventId);
   const [detailView, setDetailView] = useState<DrawerDetailView>(initialDetailView);
 
   const [listTitle, setListTitle] = useState(initialListPreset.title);
@@ -86,6 +89,7 @@ export function FileDetailDrawer({
     setMode(initialMode);
     setCanGoBack(initialCanGoBack);
     setSelectedFileId(initialFileId);
+    setSelectedEventId(initialEventId);
     setDetailView(initialDetailView);
 
     setListTitle(initialListPreset.title);
@@ -104,6 +108,7 @@ export function FileDetailDrawer({
     initialMode,
     initialCanGoBack,
     initialFileId,
+    initialEventId,
     initialDetailView,
     initialListPreset,
   ]);
@@ -196,8 +201,13 @@ export function FileDetailDrawer({
     if (event.target === event.currentTarget) onClose();
   };
 
-  const openDetail = (fileId: string, view: DrawerDetailView = "details") => {
+  const openDetail = (
+    fileId: string,
+    eventId?: string,
+    view: DrawerDetailView = "details",
+  ) => {
     setSelectedFileId(fileId);
+    setSelectedEventId(eventId ?? null);
     setDetailView(view);
     setCanGoBack(true);
     setMode("detail");
@@ -253,7 +263,7 @@ export function FileDetailDrawer({
               totalPages={totalPages}
               onPrevPage={() => setPage((prev) => Math.max(1, prev - 1))}
               onNextPage={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-              onSelectFile={(fileId) => openDetail(fileId, "details")}
+              onSelectFile={(fileId, eventId) => openDetail(fileId, eventId, "details")}
               onClose={onClose}
             />
           </div>
@@ -268,6 +278,7 @@ export function FileDetailDrawer({
           >
             <DrawerDetailMode
               fileId={selectedFileId}
+              eventId={selectedEventId}
               initialView={detailView}
               isActive={mode === "detail"}
               canGoBack={canGoBack}

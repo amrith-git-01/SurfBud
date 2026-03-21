@@ -188,7 +188,7 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
         </div>
       ) : data.isEditing ? (
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <Folder className="h-4 w-4 text-[var(--color-primary)]" />
             <input
               value={data.draftName}
@@ -205,21 +205,10 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
                   data.onEditCancel();
                 }
               }}
-              className="h-8 flex-1 rounded-lg border border-[var(--color-primary)] bg-white px-2.5 text-sm text-[var(--color-text-heading)] outline-none"
+              className="h-8 min-w-0 w-full flex-1 rounded-lg border border-[var(--color-primary)] bg-white px-2.5 text-sm text-[var(--color-text-heading)] outline-none"
             />
           </div>
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                data.onEditCommit(data.folder._id);
-              }}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
-              aria-label="Save folder name"
-            >
-              <Check className="h-3.5 w-3.5" />
-            </button>
+          <div className="mt-3 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={(event) => {
@@ -230,6 +219,17 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
               aria-label="Cancel rename"
             >
               <X className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onEditCommit(data.folder._id);
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
+              aria-label="Save folder name"
+            >
+              <Check className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>

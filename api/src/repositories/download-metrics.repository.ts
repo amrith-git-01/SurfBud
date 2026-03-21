@@ -19,12 +19,24 @@ export const DownloadMetricsRepository = {
     ).exec();
   },
 
-  async setDuplicateSize(userId: string, duplicateSize: number): Promise<void> {
+  async setDuplicateSize(
+    userId: string,
+    duplicateSize: number,
+    totalSize?: number,
+  ): Promise<void> {
+    const sizeFields: { duplicateSize: number; totalSize?: number } = {
+      duplicateSize,
+    };
+
+    if (typeof totalSize === "number") {
+      sizeFields.totalSize = totalSize;
+    }
+
     await UserDownloadMetrics.updateOne(
       { userId: new Types.ObjectId(userId) },
       {
         $set: {
-          duplicateSize,
+          ...sizeFields,
           updatedAt: new Date(),
         },
       },

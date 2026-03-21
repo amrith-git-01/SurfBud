@@ -6,6 +6,13 @@ import {
   extractFilename,
   extractDomain,
 } from "../utils/downloadHelpers";
+import {
+  handleTabBecameActive,
+  closeCurrentSession,
+  ensureBrowsingBatchAlarm,
+  handleAlarm as handleBrowsingAlarm,
+  finalizeOrphanedSessionOnStartup,
+} from "./browsingSession";
 import type {
   DownloadSettings,
   DownloadSettingsSyncPayload,
@@ -14,7 +21,9 @@ import type {
 } from "../types/shared/download-settings.types";
 
 const API_BASE = "http://localhost:3001/api";
-const SOCKET_BASE = API_BASE.endsWith("/api") ? API_BASE.slice(0, -4) : API_BASE;
+const SOCKET_BASE = API_BASE.endsWith("/api")
+  ? API_BASE.slice(0, -4)
+  : API_BASE;
 const AUTH_STORAGE_KEY = "authToken";
 const SETTINGS_STORAGE_KEY = "downloadSettings";
 const SETTINGS_SYNCED_AT_STORAGE_KEY = "downloadSettingsSyncedAt";
@@ -65,7 +74,10 @@ interface SettingsSyncMessage {
   payload: DownloadSettingsSyncPayload;
 }
 
-type RuntimeMessage = AuthSuccessMessage | AuthLogoutMessage | SettingsSyncMessage;
+type RuntimeMessage =
+  | AuthSuccessMessage
+  | AuthLogoutMessage
+  | SettingsSyncMessage;
 
 let removalSocket: Socket | null = null;
 let activeSocketToken: string | null = null;
@@ -196,7 +208,9 @@ function getDomainRuleValue(
   const normalized = normalizeDomain(sourceDomain);
   if (!normalized) return null;
 
-  const rule = settings.domainRules.find((item) => item.domain.toLowerCase() === normalized);
+  const rule = settings.domainRules.find(
+    (item) => item.domain.toLowerCase() === normalized,
+  );
   return rule?.rule ?? null;
 }
 
@@ -252,7 +266,9 @@ function getRoutingFolderForCategory(
 }
 
 function buildRoutedFilename(folderName: string, filename: string): string {
-  const normalizedFolder = folderName.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const normalizedFolder = folderName
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "");
   const normalizedFile = filename.replace(/^\/+/, "");
   return `${normalizedFolder}/${normalizedFile}`;
 }
@@ -260,13 +276,17 @@ function buildRoutedFilename(folderName: string, filename: string): string {
 async function getStoredSettings(): Promise<DownloadSettings> {
   return new Promise((resolve) => {
     chrome.storage.sync.get([SETTINGS_STORAGE_KEY], (result) => {
-      const stored = result[SETTINGS_STORAGE_KEY] as DownloadSettings | undefined;
+      const stored = result[SETTINGS_STORAGE_KEY] as
+        | DownloadSettings
+        | undefined;
       resolve(stored ?? DEFAULT_SETTINGS);
     });
   });
 }
 
-async function persistDownloadSettings(payload: DownloadSettingsSyncPayload): Promise<void> {
+async function persistDownloadSettings(
+  payload: DownloadSettingsSyncPayload,
+): Promise<void> {
   await chrome.storage.sync.set({
     [SETTINGS_STORAGE_KEY]: payload.settings,
     [SETTINGS_SYNCED_AT_STORAGE_KEY]: payload.syncedAt,
@@ -341,11 +361,13 @@ async function patchRemovalFailed(
 }
 
 async function removeDownloadedFileByPath(savedPath: string): Promise<boolean> {
-  const items = await new Promise<chrome.downloads.DownloadItem[]>((resolve) => {
-    chrome.downloads.search({}, (result) => {
-      resolve(result ?? []);
-    });
-  });
+  const items = await new Promise<chrome.downloads.DownloadItem[]>(
+    (resolve) => {
+      chrome.downloads.search({}, (result) => {
+        resolve(result ?? []);
+      });
+    },
+  );
 
   const matchedItem = items.find((item) => {
     if (!item.filename) {
@@ -462,15 +484,17 @@ async function bootstrapSocketConnection(): Promise<void> {
 chrome.runtime.onMessage.addListener(
   (msg: RuntimeMessage, _sender, sendResponse): boolean => {
     if (msg.type === "AUTH_SUCCESS" && msg.payload) {
-      chrome.storage.sync.set({
-        authToken: msg.payload.token,
-        user: msg.payload.user,
-        isAuthenticated: true,
-      }).then(async () => {
-        await syncDownloadSettingsFromApi(msg.payload.token);
-        connectRemovalSocket(msg.payload.token);
-        sendResponse({ ok: true });
-      });
+      chrome.storage.sync
+        .set({
+          authToken: msg.payload.token,
+          user: msg.payload.user,
+          isAuthenticated: true,
+        })
+        .then(async () => {
+          await syncDownloadSettingsFromApi(msg.payload.token);
+          connectRemovalSocket(msg.payload.token);
+          sendResponse({ ok: true });
+        });
     } else if (msg.type === "SETTINGS_SYNC" && msg.payload) {
       persistDownloadSettings(msg.payload).then(async () => {
         const token = await getAuthToken();
@@ -490,6 +514,10 @@ chrome.runtime.onMessage.addListener(
 );
 
 void bootstrapSocketConnection();
+void (async () => {
+  await finalizeOrphanedSessionOnStartup();
+  await ensureBrowsingBatchAlarm();
+})();
 
 async function getAuthToken(): Promise<string | null> {
   return new Promise((resolve) => {
@@ -537,7 +565,11 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest): boolean => {
     const category = inferFileCategory(filename, item.mime);
     const sourceDomain = extractDomain(item.finalUrl ?? item.url ?? "");
     let settings = await getStoredSettings();
-    let folderName = getRoutingFolderForCategory(settings, sourceDomain, category);
+    let folderName = getRoutingFolderForCategory(
+      settings,
+      sourceDomain,
+      category,
+    );
 
     // If settings in extension storage are stale, refresh once from API and retry routing.
     if (!folderName && settings.routingEnabled) {
@@ -545,7 +577,11 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest): boolean => {
       if (token) {
         await syncDownloadSettingsFromApi(token);
         settings = await getStoredSettings();
-        folderName = getRoutingFolderForCategory(settings, sourceDomain, category);
+        folderName = getRoutingFolderForCategory(
+          settings,
+          sourceDomain,
+          category,
+        );
       }
     }
 
@@ -604,5 +640,60 @@ chrome.downloads.onChanged.addListener((delta) => {
       savedPath: item.filename?.trim() || undefined,
     };
     await sendToBackend(payload);
+  })();
+});
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  void (async () => {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      const url = tab.url ?? "";
+      if (!url.startsWith("http")) {
+        await closeCurrentSession();
+        return;
+      }
+      await handleTabBecameActive(tabId, url);
+    } catch {
+      await closeCurrentSession();
+    }
+  })();
+});
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!tab.active) return;
+  if (!changeInfo.url) return;
+  const url = changeInfo.url;
+  if (!url.startsWith("http")) {
+    void closeCurrentSession();
+    return;
+  }
+  void handleTabBecameActive(tabId, url);
+});
+chrome.tabs.onRemoved.addListener((_tabId) => {
+  // Only one open session at a time → safe to just close
+  void closeCurrentSession();
+});
+chrome.tabs.onReplaced.addListener((_addedTabId, _removedTabId) => {
+  void closeCurrentSession();
+});
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  void (async () => {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
+      await closeCurrentSession();
+      return;
+    }
+    const [activeTab] = await chrome.tabs.query({ active: true, windowId });
+    if (!activeTab?.id || !activeTab.url?.startsWith("http")) {
+      await closeCurrentSession();
+      return;
+    }
+    await handleTabBecameActive(activeTab.id, activeTab.url);
+  })();
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  void (async () => {
+    if (alarm.name === "browsing-batch-send") {
+      await handleBrowsingAlarm(alarm.name);
+    }
+    // if you add other alarms in future (e.g. for downloads), handle them here too
   })();
 });

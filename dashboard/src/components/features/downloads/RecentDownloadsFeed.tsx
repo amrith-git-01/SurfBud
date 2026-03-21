@@ -13,6 +13,7 @@ import {
 
 interface RecentDownloadsFeedProps {
   onOpenDetail?: (payload: {
+    eventId: string;
     fileId: string;
     filename: string;
     createdAt: string;
@@ -86,6 +87,7 @@ export function RecentDownloadsFeed({
                     onClick={() =>
                       fileId &&
                       onOpenDetail?.({
+                        eventId: event._id,
                         fileId,
                         filename: event.filename,
                         createdAt: event.createdAt,
