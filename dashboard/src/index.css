@@ -139,7 +139,7 @@ color: var(--color-text-muted);
   border-top: 1px solid rgba(255, 255, 255, 0.6); /* Sharp top specular edge */
   border-left: 1px solid rgba(255, 255, 255, 0.6); /* Sharp left specular edge */
   border-radius: 12px;
-  padding: 16px;
+  padding: 12px; /* more compact metric card height */
   box-shadow:
     0 8px 32px rgba(8, 145, 178, 0.05), /* Subtle ambient teal glow */
     0 2px 8px rgba(8, 145, 178, 0.02);
@@ -190,6 +190,16 @@ color: var(--color-text-muted);
     border-color: rgba(8, 145, 178, 0.2);
     box-shadow: 0 8px 32px rgba(8, 145, 178, 0.08), 0 2px 8px rgba(8, 145, 178, 0.04);
   }
+}
+
+/* Compact metric card label (smaller than .section-label to reduce card bulk). */
+.metric-card-label {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
 }
 
 /* ─── Header glass ───────────────────────────────────────────── */

@@ -1,0 +1,233 @@
+import { useMemo, useState } from "react";
+import {
+  BROWSING_STATS_PERIOD_OPTIONS,
+  type BrowsingStatsPeriod,
+} from "@/api/browsing.api";
+import { useBrowsingCategories, useBrowsingDomainStats } from "@/api/useBrowsing";
+import { Dropdown } from "@/components/ui/Dropdown";
+import {
+  ViewModeContainer,
+  type ViewModeContainerItem,
+} from "@/components/ui/ViewModeContainer";
+import type { ViewMode } from "@/types/ui.types";
+import { formatDurationSeconds } from "@/utils/formatDuration";
+
+/** Same palette as DownloadSources — keeps list/pie/bar colors aligned across pages. */
+const SOURCE_COLORS = [
+  "var(--color-primary-500)",
+  "var(--color-accent-500)",
+  "#10b981",
+  "#f97316",
+  "#ec4899",
+  "#06b6d4",
+  "#f59e0b",
+  "#84cc16",
+  "#14b8a6",
+  "#6366f1",
+];
+
+const TOP_SITES_SHOWN = 5;
+const DOMAIN_FETCH_LIMIT = 8;
+
+interface TopSitesListProps {
+  hideHeading?: boolean;
+}
+
+export function TopSitesList({ hideHeading = false }: TopSitesListProps) {
+  const [period, setPeriod] = useState<BrowsingStatsPeriod>("today");
+  const {
+    data: domainPayload,
+    isLoading: domainsLoading,
+    isError: domainsError,
+    refetch: refetchDomains,
+  } = useBrowsingDomainStats({ limit: DOMAIN_FETCH_LIMIT, period });
+  const domains = domainPayload?.domains ?? [];
+  const periodTotalActive = domainPayload?.totalActiveTime ?? 0;
+  const { data: catalog = [] } = useBrowsingCategories();
+  const [view, setView] = useState<ViewMode>("list");
+
+  const slugToColor = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of catalog) {
+      m.set(c.slug, c.color);
+    }
+    return m;
+  }, [catalog]);
+
+  const slugToIcon = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of catalog) {
+      m.set(c.slug, c.icon);
+    }
+    return m;
+  }, [catalog]);
+
+  const rowsModel = useMemo(() => {
+    const top = domains.slice(0, TOP_SITES_SHOWN);
+    const sumTop = top.reduce((s, d) => s + d.totalActiveTime, 0);
+    const otherTime = Math.max(0, periodTotalActive - sumTop);
+    const showOther = otherTime > 0;
+
+    return {
+      top,
+      periodTotalActive,
+      otherTime,
+      showOther,
+    };
+  }, [domains, periodTotalActive]);
+
+  const containerData: ViewModeContainerItem[] = useMemo(() => {
+    const items: ViewModeContainerItem[] = [];
+    rowsModel.top.forEach((row, idx) => {
+      const fill =
+        row.domainColor?.trim() ||
+        slugToColor.get(row.categorySlug) ||
+        SOURCE_COLORS[idx % SOURCE_COLORS.length];
+      const domain = row.domain.trim();
+      const label = row.label?.trim() ?? "";
+      const same =
+        !label || label.toLowerCase() === domain.toLowerCase();
+      const categoryIcon = slugToIcon.get(row.categorySlug);
+      items.push({
+        name: same ? domain : label,
+        nameSuffix: same ? undefined : domain,
+        value: row.totalActiveTime,
+        fill,
+        iconUrl: row.domainLogo?.trim() || undefined,
+        categoryIcon: categoryIcon ?? undefined,
+        categoryColor: fill,
+      });
+    });
+    if (rowsModel.showOther) {
+      items.push({
+        name: "Others",
+        value: rowsModel.otherTime,
+        fill: "#9ca3af",
+      });
+    }
+    return items;
+  }, [rowsModel, slugToColor, slugToIcon]);
+
+  const totalRow: ViewModeContainerItem = useMemo(
+    () => ({
+      name: "Total",
+      value: rowsModel.periodTotalActive,
+      fill: "#6b7280",
+    }),
+    [rowsModel.periodTotalActive],
+  );
+
+  const periodDescription =
+    period === "today"
+      ? "today"
+      : period === "week"
+        ? "this week"
+        : period === "month"
+          ? "this month"
+          : "all time";
+
+  const isLoading = domainsLoading;
+
+  const refetch = () => {
+    void refetchDomains();
+  };
+
+  if (isLoading) {
+    return <TopSitesListSkeleton hideHeading={hideHeading} />;
+  }
+
+  if (domainsError) {
+    return (
+      <section className={hideHeading ? "" : "mb-12"}>
+        {!hideHeading && (
+          <div className="mb-4 px-2">
+            <h3 className="text-sm font-semibold text-gray-900">Site breakdown</h3>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+              Active time by domain and share of your total time for{" "}
+              {periodDescription}.
+            </p>
+          </div>
+        )}
+        <div className="chart-glass w-full">
+          <div className="px-4 py-6 text-center">
+            <p className="text-sm text-[var(--color-danger)]">
+              Could not load top sites
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-2 text-sm font-medium text-[var(--color-primary)] hover:underline"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <div className="w-full">
+      {!hideHeading && (
+        <div className="mb-4 px-2">
+          <h3 className="text-sm font-semibold text-gray-900">Site breakdown</h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Active time by domain and share of your total time today.
+          </p>
+        </div>
+      )}
+      <ViewModeContainer
+        view={view}
+        onViewChange={setView}
+        data={containerData}
+        title="Sites"
+        headerLeft={
+          <Dropdown
+            className="shrink-0"
+            value={period}
+            options={BROWSING_STATS_PERIOD_OPTIONS}
+            onChange={setPeriod}
+            align="right"
+            size="md"
+          />
+        }
+        valueLabel="time"
+        listVariant="browsing"
+        formatValue={(n) => formatDurationSeconds(n)}
+        yAxisTickFormatter={(seconds) => formatDurationSeconds(seconds)}
+        totalRow={totalRow}
+        colors={SOURCE_COLORS}
+        emptyMessage={
+          view === "list"
+            ? "No data available"
+            : "No activity yet. Browse with SurfBud to see trends here."
+        }
+        minHeight="420px"
+      />
+    </div>
+  );
+}
+
+function TopSitesListSkeleton({ hideHeading }: { hideHeading: boolean }) {
+  return (
+    <section className={hideHeading ? "" : "mb-12"}>
+      {!hideHeading && (
+        <div className="mb-4 px-2">
+          <h3 className="text-sm font-semibold text-gray-900">Site breakdown</h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Active time by domain and share of your total time today.
+          </p>
+        </div>
+      )}
+      <div className="chart-glass w-full p-6">
+        <div className="skeleton h-6 w-16 mb-6 rounded" />
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 mb-4">
+            <div className="skeleton h-2 flex-1 rounded-full" />
+            <div className="skeleton h-4 w-24 rounded" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
