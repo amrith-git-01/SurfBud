@@ -7,10 +7,13 @@ export interface IDomainClassification extends Document {
   categorySlug: string;
   confidence: DomainConfidence;
   verifiedCount: number;
+  domainLogo: string | null;
+  domainColor: string | null;
   classifiedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
 const domainClassificationSchema = new Schema<IDomainClassification>(
   {
     domain: { type: String, required: true, trim: true, lowercase: true },
@@ -25,6 +28,8 @@ const domainClassificationSchema = new Schema<IDomainClassification>(
     },
     verifiedCount: { type: Number, required: true, default: 0, min: 0 },
     classifiedAt: { type: Date, default: null },
+    domainLogo: { type: String, default: null },
+    domainColor: { type: String, default: null },
   },
   { timestamps: true },
 );

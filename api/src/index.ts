@@ -16,6 +16,8 @@ import { socketManager } from "./websocket/socket.manager";
 
 import "./jobs/workers/metrics-rollup.worker";
 import "./jobs/workers/removal.worker";
+import "./jobs/workers/browsing-metrics.worker";
+import "./jobs/workers/domain-classification.worker";
 
 const app = express();
 const httpServer = createServer(app);

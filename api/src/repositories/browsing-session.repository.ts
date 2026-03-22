@@ -56,11 +56,103 @@ export const BrowsingSessionRepository = {
       upserted: result.upsertedCount,
     };
   },
-  async findRecent(userId: string, limit: number): Promise<IBrowsingSession[]> {
+  /**
+   * Most recent sessions (newest `endedAt` first), capped for filtering (e.g. drop localhost, then slice).
+   */
+  async findRecentCandidates(
+    userId: string,
+    maxScan: number,
+  ): Promise<IBrowsingSession[]> {
     return BrowsingSession.find({ userId: new Types.ObjectId(userId) })
       .sort({ endedAt: -1 })
-      .limit(limit)
+      .limit(maxScan)
       .lean()
       .exec() as Promise<IBrowsingSession[]>;
+  },
+  async findForLocalDate(
+    userId: string,
+    timezone: string,
+    dateStr: string,
+  ): Promise<IBrowsingSession[]> {
+    return BrowsingSession.find({
+      userId: new Types.ObjectId(userId),
+      $expr: {
+        $eq: [
+          {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$startedAt",
+              timezone,
+            },
+          },
+          dateStr,
+        ],
+      },
+    })
+      .sort({ startedAt: 1 })
+      .lean()
+      .exec() as Promise<IBrowsingSession[]>;
+  },
+
+  async countForLocalDate(
+    userId: string,
+    timezone: string,
+    dateStr: string,
+  ): Promise<number> {
+    return BrowsingSession.countDocuments({
+      userId: new Types.ObjectId(userId),
+      $expr: {
+        $eq: [
+          {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$startedAt",
+              timezone,
+            },
+          },
+          dateStr,
+        ],
+      },
+    }).exec();
+  },
+
+  async distinctDomainsInLocalDateRange(
+    userId: string,
+    timezone: string,
+    fromDateStr: string,
+    toDateStr: string,
+  ): Promise<string[]> {
+    const rows = await BrowsingSession.distinct("domain", {
+      userId: new Types.ObjectId(userId),
+      $expr: {
+        $and: [
+          {
+            $gte: [
+              {
+                $dateToString: {
+                  format: "%Y-%m-%d",
+                  date: "$startedAt",
+                  timezone,
+                },
+              },
+              fromDateStr,
+            ],
+          },
+          {
+            $lte: [
+              {
+                $dateToString: {
+                  format: "%Y-%m-%d",
+                  date: "$startedAt",
+                  timezone,
+                },
+              },
+              toDateStr,
+            ],
+          },
+        ],
+      },
+    });
+    return rows as string[];
   },
 };

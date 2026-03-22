@@ -9,7 +9,8 @@
     "type-check": "tsc --noEmit",
     "seed:downloads": "tsx src/scripts/seed-downloads.ts",
     "clear:data": "tsx src/scripts/clear-data.ts",
-    "seed:browsing-categories": "tsx src/scripts/seed-browsing-categories.ts"
+    "seed:browsing-categories": "tsx src/scripts/seed-browsing-categories.ts",
+    "list:groq-models": "tsx src/scripts/list-groq-models.ts"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +23,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "groq-sdk": "^1.1.1",
     "helmet": "^8.1.0",
     "ioredis": "^5.10.0",
     "jsonwebtoken": "^9.0.3",
