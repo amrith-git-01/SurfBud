@@ -13,6 +13,8 @@ const EnvSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be ≥ 32 chars"),
   DASHBOARD_ORIGIN: z.string().default("http://localhost:5173"),
   EXTENSION_ORIGIN: z.string().default("chrome-extension://"),
+  GROQ_API_KEY: z.string().optional().default(""),
+  BRANDFETCH_API_KEY: z.string().optional().default(""),
 });
 
 export const env = EnvSchema.parse(process.env);
