@@ -3,7 +3,10 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { BrowsingSessionService } from "../services/browsing-session.service";
 import { BrowsingMetricsService } from "../services/browsing-metrics.service";
 import { BrowsingTimelineService } from "../services/browsing-timeline.service";
-import type { BrowsingStatsPeriod } from "../schemas/browsing.schemas";
+import type {
+  BrowsingDrawerQueryInput,
+  BrowsingStatsPeriod,
+} from "../schemas/browsing.schemas";
 import type { BrowsingSessionBatchPayload } from "../types/shared/browsing.types";
 import { logger } from "../utils/logger";
 
@@ -49,28 +52,55 @@ export const BrowsingController = {
     });
   }),
 
-  getRecentSessions: asyncHandler(async (req: Request, res: Response) => {
+  getSessions: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const validatedQuery = (res.locals.validatedQuery ?? {}) as {
-      limit?: number;
-    };
-    const limit = validatedQuery.limit ?? 50;
+    const timezone = req.user!.timezone ?? "UTC";
+    const q = (res.locals.validatedQuery ?? {}) as BrowsingDrawerQueryInput;
 
-    const sessions = await BrowsingSessionService.getRecent(userId, limit);
+    const feedOnly =
+      q.page === 1 &&
+      (q.sort ?? "newest") === "newest" &&
+      !q.period &&
+      !q.date &&
+      !q.from &&
+      !q.to &&
+      !q.domain &&
+      !q.categorySlug &&
+      !q.productivityType;
+
+    if (feedOnly) {
+      const sessions = await BrowsingSessionService.getRecent(userId, q.limit);
+      res.json({
+        success: true,
+        data: {
+          sessions,
+          total: sessions.length,
+          page: 1,
+          totalPages: sessions.length === 0 ? 0 : 1,
+        },
+      });
+      return;
+    }
+
+    const result = await BrowsingSessionService.getFiltered(
+      userId,
+      q,
+      timezone,
+    );
 
     res.json({
       success: true,
-      data: { sessions },
+      data: result,
     });
   }),
 
-  getMetrics: asyncHandler(async (req: Request, res: Response) => {
+  getStats: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const metrics = await BrowsingMetricsService.getMetricsForUser(userId);
     res.json({ success: true, data: { metrics } });
   }),
 
-  getStatsDaily: asyncHandler(async (req: Request, res: Response) => {
+  getTrend: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const tz = req.user!.timezone ?? "UTC";
     const validatedQuery = res.locals.validatedQuery ?? {};

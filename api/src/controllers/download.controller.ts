@@ -155,6 +155,7 @@ export const DownloadController = {
       {
         page: Number(q.page ?? 1),
         limit: Number(q.limit ?? 10),
+        sort: (q.sort as "newest" | "oldest") ?? "newest",
         status: q.status as "new" | "duplicate" | undefined,
         isRemoved:
           typeof q.isRemoved === "boolean"
