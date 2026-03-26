@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useBrowsingDailyTrend } from "@/api/useBrowsing";
+import { useBrowsingTrend } from "@/api/useBrowsing";
 import {
   TrendComposedChart,
   type TrendPeriod,
@@ -19,7 +19,7 @@ export function BrowsingTrendChart({
   onDayClick,
 }: BrowsingTrendChartProps) {
   const [period, setPeriod] = useState<Period>(7);
-  const { data: trendData, isLoading, isError } = useBrowsingDailyTrend(period);
+  const { data: trendData, isLoading, isError } = useBrowsingTrend(period);
 
   const formattedData: TrendPoint[] = (trendData ?? []).map((bucket) => {
     const d = new Date(bucket.date);
@@ -52,7 +52,7 @@ export function BrowsingTrendChart({
       }}
       lineSeries={[
         { key: "productiveTime", label: "Productive", color: "#16A34A" },
-        { key: "distractingTime", label: "Distracting", color: "#DC2626" },
+        { key: "distractingTime", label: "Distractive", color: "#DC2626" },
       ]}
       tooltipRows={[
         {
@@ -69,7 +69,7 @@ export function BrowsingTrendChart({
         },
         {
           key: "distractingTime",
-          label: "Distracting",
+          label: "Distractive",
           color: "#DC2626",
           formatter: (v) => formatDurationSeconds(v),
         },
