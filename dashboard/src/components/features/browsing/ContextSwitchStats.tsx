@@ -1,5 +1,5 @@
 import { Clock, Focus, GitBranch, Orbit } from "lucide-react";
-import { useBrowsingMetrics } from "@/api/useBrowsing";
+import { useBrowsingStats } from "@/api/useBrowsing";
 import { MetricCard } from "@/components/ui/MetricCard";
 import {
   avgSessionSeconds,
@@ -18,7 +18,7 @@ function formatScatteredPeriods(n: number): string {
 }
 
 export function ContextSwitchStats() {
-  const { data: metrics, isLoading, isError, refetch } = useBrowsingMetrics();
+  const { data: metrics, isLoading, isError, refetch } = useBrowsingStats();
 
   if (isError) {
     return (

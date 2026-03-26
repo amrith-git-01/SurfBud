@@ -3,14 +3,16 @@ import { useBrowsingDailyTimeline } from "@/api/useBrowsing";
 import { ContextSwitchStats } from "./ContextSwitchStats";
 import type { BrowsingTimelineBlock } from "@/api/browsing.api";
 import { formatDurationSeconds } from "@/utils/formatDuration";
+import type { BrowsingDrawerTrigger } from "./browsingDrawer.types";
+import { SkeletonBlock } from "@/components/skeletons/SkeletonBlock";
 
-/** Spec §9.1 — productive / distracting / neutral / empty */
+/** Spec §9.1 — productive / distractive / neutral / empty */
 const BLOCK_BG: Record<
   BrowsingTimelineBlock["productivity"],
   string
 > = {
   productive: "rgba(22, 163, 74, 0.6)",
-  distracting: "rgba(220, 38, 38, 0.6)",
+  distractive: "rgba(220, 38, 38, 0.6)",
   neutral: "rgba(148, 163, 184, 0.4)",
   empty: "rgba(148, 163, 184, 0.1)",
 };
@@ -64,7 +66,11 @@ function productivityTitle(
   return p.charAt(0).toUpperCase() + p.slice(1);
 }
 
-export function DailyTimeline() {
+interface DailyTimelineProps {
+  onOpenDrawer?: (trigger: BrowsingDrawerTrigger) => void;
+}
+
+export function DailyTimeline({ onOpenDrawer }: DailyTimelineProps) {
   const { data, isLoading, isError, refetch } = useBrowsingDailyTimeline({});
   const [hovered, setHovered] = useState<BrowsingTimelineBlock | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(
@@ -108,8 +114,29 @@ export function DailyTimeline() {
           </p>
         </div>
         <div className="chart-glass w-full p-6">
-          <div className="skeleton mb-4 h-10 w-full rounded-lg" />
-          <div className="skeleton h-3 w-full rounded" />
+          <div
+            className="mb-0 grid h-10 w-full gap-px"
+            style={{
+              gridTemplateColumns: `repeat(${TIMELINE_SLOT_COUNT}, minmax(0, 1fr))`,
+            }}
+          >
+            {Array.from({ length: TIMELINE_SLOT_COUNT }).map((_, i) => (
+              <SkeletonBlock key={i} className="h-10 w-full rounded-sm" />
+            ))}
+          </div>
+          <div className="mt-px grid h-4 grid-cols-8 gap-1">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <SkeletonBlock key={i} className="h-3 w-full rounded" />
+            ))}
+          </div>
+          <div className="mt-6 flex flex-wrap items-center gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <SkeletonBlock className="h-2.5 w-2.5 rounded-sm" />
+                <SkeletonBlock className="h-3 w-20 rounded" />
+              </div>
+            ))}
+          </div>
           <div className="mt-8 border-t border-[var(--color-border)] pt-8">
             <ContextSwitchStats />
           </div>
@@ -164,8 +191,19 @@ export function DailyTimeline() {
               <button
                 key={b.index}
                 type="button"
-                className="min-h-[40px] min-w-0 rounded-sm outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+                disabled={b.productivity === "empty" || !onOpenDrawer}
+                className="min-h-[40px] min-w-0 rounded-sm outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:cursor-default disabled:opacity-100 disabled:hover:opacity-100"
                 style={{ backgroundColor: BLOCK_BG[b.productivity] }}
+                onClick={() => {
+                  if (b.productivity === "empty" || !onOpenDrawer) return;
+                  onOpenDrawer({
+                    type: "timeline-block",
+                    startIso: b.startIso,
+                    endIso: b.endIso,
+                    timeLabel: formatSlotRange(b.startIso, b.endIso, timezone),
+                    productivity: b.productivity,
+                  });
+                }}
                 onMouseEnter={(e) => {
                   setHovered(b);
                   setPointer({ x: e.clientX, y: e.clientY });
@@ -223,9 +261,9 @@ export function DailyTimeline() {
           <span className="inline-flex items-center gap-1.5">
             <span
               className="inline-block h-2.5 w-2.5 rounded-sm"
-              style={{ backgroundColor: BLOCK_BG.distracting }}
+              style={{ backgroundColor: BLOCK_BG.distractive }}
             />
-            Distracting
+            Distractive
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span
