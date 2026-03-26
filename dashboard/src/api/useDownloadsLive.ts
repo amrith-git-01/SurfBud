@@ -25,8 +25,8 @@ export function useDownloadsLive() {
       // React Query will auto-refetch in background
       queryClient.invalidateQueries({ queryKey: downloadKeys.stats() });
       queryClient.invalidateQueries({ queryKey: downloadKeys.recent() });
-      queryClient.invalidateQueries({ queryKey: downloadKeys.categories() });
-      queryClient.invalidateQueries({ queryKey: downloadKeys.domains() });
+      queryClient.invalidateQueries({ queryKey: downloadKeys.categoriesAll() });
+      queryClient.invalidateQueries({ queryKey: downloadKeys.domainsAll() });
       queryClient.invalidateQueries({ queryKey: downloadKeys.duplicates() });
 
       // Also invalidate trend for all periods
@@ -61,8 +61,8 @@ export function useDownloadsLive() {
       queryClient.invalidateQueries({ queryKey: downloadKeys.recent() });
       queryClient.invalidateQueries({ queryKey: downloadKeys.duplicates() });
       queryClient.invalidateQueries({ queryKey: downloadKeys.stats() });
-      queryClient.invalidateQueries({ queryKey: downloadKeys.categories() });
-      queryClient.invalidateQueries({ queryKey: downloadKeys.domains() });
+      queryClient.invalidateQueries({ queryKey: downloadKeys.categoriesAll() });
+      queryClient.invalidateQueries({ queryKey: downloadKeys.domainsAll() });
       queryClient.invalidateQueries({
         predicate: (query) => {
           return (

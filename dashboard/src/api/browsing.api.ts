@@ -1,4 +1,9 @@
 import { api } from "../services/api";
+import type {
+  BrowsingDomainRule,
+  BrowsingRuleValue,
+  BrowsingSettings,
+} from "../types/shared/browsing-settings.types";
 
 const BASE = "/api/browsing";
 
@@ -11,7 +16,7 @@ type ApiResponse<T> = ApiSuccess<T>;
 
 // ─── Serialized UserBrowsingMetrics (matches API serializeUserBrowsingMetrics) ───
 
-export type BrowsingProductivityType = "productive" | "distracting" | "neutral";
+export type BrowsingProductivityType = "productive" | "distractive" | "neutral";
 
 export interface UserBrowsingMetricsToday {
   totalActiveTime: number;
@@ -144,6 +149,8 @@ export interface BrowsingSessionRow {
   domainColor?: string | null;
   /** From DomainClassification — for category icon/color fallback in the UI. */
   categorySlug?: string | null;
+  /** Resolved server-side from BrowsingCategory via categorySlug. */
+  productivityType?: BrowsingProductivityType;
   startedAt: string;
   endedAt: string;
   durationSeconds: number;
@@ -154,6 +161,27 @@ export interface BrowsingSessionRow {
   };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BrowsingSessionsPagePayload {
+  sessions: BrowsingSessionRow[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface BrowsingDrawerSessionsParams {
+  page: number;
+  limit: number;
+  period?: BrowsingStatsPeriod;
+  date?: string;
+  from?: string;
+  to?: string;
+  domain?: string;
+  excludeDomains?: string[];
+  categorySlug?: string;
+  productivityType?: BrowsingProductivityType;
+  sort?: "newest" | "oldest" | "longest";
 }
 
 export interface BrowsingTimelineBlock {
@@ -177,11 +205,11 @@ export const BROWSING_STATS_PERIOD_OPTIONS: {
   value: BrowsingStatsPeriod;
   label: string;
 }[] = [
-  { value: "today", label: "Today" },
-  { value: "week", label: "This week" },
-  { value: "month", label: "This month" },
-  { value: "all", label: "All time" },
-];
+    { value: "today", label: "Today" },
+    { value: "week", label: "This week" },
+    { value: "month", label: "This month" },
+    { value: "all", label: "All time" },
+  ];
 
 export interface BrowsingStatsDateLimitParams {
   /** Defaults to `today` on the server when omitted. */
@@ -192,29 +220,29 @@ export interface BrowsingStatsDateLimitParams {
 
 // ─── API functions ───
 
-export async function getBrowsingMetrics(): Promise<UserBrowsingMetrics | null> {
+export async function getBrowsingStats(): Promise<UserBrowsingMetrics | null> {
   const { data } = await api.get<
     ApiResponse<{ metrics: UserBrowsingMetrics | null }>
-  >(`${BASE}/metrics`);
+  >(`${BASE}/stats`);
   return data.data?.metrics ?? null;
 }
 
 /** Backend returns `data: categories[]` (array), not `{ categories }`. */
-export async function getBrowsingCategories(): Promise<
+export async function getBrowsingCategoryCatalog(): Promise<
   BrowsingCategoryCatalogItem[]
 > {
-  const { data } = await api.get<
-    ApiResponse<BrowsingCategoryCatalogItem[]>
-  >(`${BASE}/categories`);
+  const { data } = await api.get<ApiResponse<BrowsingCategoryCatalogItem[]>>(
+    `${BASE}/category-catalog`,
+  );
   return Array.isArray(data.data) ? data.data : [];
 }
 
-export async function getBrowsingStatsDaily(
+export async function getBrowsingTrend(
   period: 7 | 15 | 30 = 7,
 ): Promise<BrowsingDailyTrendBucket[]> {
   const { data } = await api.get<
     ApiResponse<{ trend: BrowsingDailyTrendBucket[] }>
-  >(`${BASE}/stats/daily`, { params: { period: String(period) } });
+  >(`${BASE}/trend`, { params: { period: String(period) } });
   return data.data?.trend ?? [];
 }
 
@@ -225,11 +253,12 @@ export interface BrowsingDomainStatsPayload {
 }
 
 export async function getBrowsingStatsDomains(
-  params: BrowsingStatsDateLimitParams = {},
+  params: BrowsingStatsDateLimitParams = { period: "today" },
 ): Promise<BrowsingDomainStatsPayload> {
-  const { data } = await api.get<
-    ApiResponse<BrowsingDomainStatsPayload>
-  >(`${BASE}/stats/domains`, { params });
+  const { data } = await api.get<ApiResponse<BrowsingDomainStatsPayload>>(
+    `${BASE}/domains`,
+    { params },
+  );
   return {
     domains: data.data?.domains ?? [],
     totalActiveTime: data.data?.totalActiveTime ?? 0,
@@ -237,21 +266,39 @@ export async function getBrowsingStatsDomains(
 }
 
 export async function getBrowsingStatsCategories(
-  params: BrowsingStatsDateLimitParams = {},
+  params: BrowsingStatsDateLimitParams = { period: "today" },
 ): Promise<BrowsingCategoryBreakdownRow[]> {
   const { data } = await api.get<
     ApiResponse<{ categories: BrowsingCategoryBreakdownRow[] }>
-  >(`${BASE}/stats/categories`, { params });
+  >(`${BASE}/categories`, { params });
   return data.data?.categories ?? [];
 }
 
 export async function getBrowsingRecentSessions(
-  limit = 50,
+  limit = 10,
 ): Promise<BrowsingSessionRow[]> {
-  const { data } = await api.get<
-    ApiResponse<{ sessions: BrowsingSessionRow[] }>
-  >(`${BASE}/sessions`, { params: { limit } });
+  const { data } = await api.get<ApiResponse<BrowsingSessionsPagePayload>>(
+    `${BASE}/sessions`,
+    { params: { page: 1, limit, sort: "newest" } },
+  );
   return data.data?.sessions ?? [];
+}
+
+export async function getFilteredSessions(
+  params: BrowsingDrawerSessionsParams,
+): Promise<BrowsingSessionsPagePayload> {
+  const { data } = await api.get<ApiResponse<BrowsingSessionsPagePayload>>(
+    `${BASE}/sessions`,
+    { params },
+  );
+  return (
+    data.data ?? {
+      sessions: [],
+      total: 0,
+      page: 1,
+      totalPages: 0,
+    }
+  );
 }
 
 export interface BrowsingTimelineParams {
@@ -261,12 +308,83 @@ export interface BrowsingTimelineParams {
 export async function getBrowsingStatsTimeline(
   params: BrowsingTimelineParams = {},
 ): Promise<BrowsingTimelinePayload> {
-  const { data } = await api.get<
-    ApiResponse<BrowsingTimelinePayload>
-  >(`${BASE}/stats/timeline`, { params });
+  const { data } = await api.get<ApiResponse<BrowsingTimelinePayload>>(
+    `${BASE}/stats/timeline`,
+    { params },
+  );
   return {
     date: data.data?.date ?? "",
     timezone: data.data?.timezone ?? "UTC",
     blocks: data.data?.blocks ?? [],
   };
+}
+
+export interface UpdateBrowsingSettingsInput {
+  trackingEnabled?: boolean;
+  interactionTrackingEnabled?: boolean;
+  minSessionDurationSeconds?: number;
+  mergeGapSeconds?: number;
+}
+
+export interface CreateBrowsingDomainRuleInput {
+  domain: string;
+  rule: BrowsingRuleValue;
+}
+
+export interface UpdateBrowsingDomainRuleInput {
+  rule: BrowsingRuleValue;
+}
+
+export async function getBrowsingSettings(): Promise<BrowsingSettings> {
+  const { data } = await api.get<ApiResponse<BrowsingSettings>>(
+    `${BASE}/settings`,
+  );
+  return data.data;
+}
+
+export async function updateBrowsingSettings(
+  payload: UpdateBrowsingSettingsInput,
+): Promise<BrowsingSettings> {
+  const { data } = await api.patch<ApiResponse<BrowsingSettings>>(
+    `${BASE}/settings`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function getBrowsingDomainRules(): Promise<BrowsingDomainRule[]> {
+  const { data } = await api.get<
+    ApiResponse<{ domainRules: BrowsingDomainRule[] }>
+  >(`${BASE}/settings/rules/domains`);
+  return data.data.domainRules ?? [];
+}
+
+export async function createBrowsingDomainRule(
+  payload: CreateBrowsingDomainRuleInput,
+): Promise<BrowsingSettings> {
+  const { data } = await api.post<ApiResponse<BrowsingSettings>>(
+    `${BASE}/settings/rules/domains`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function updateBrowsingDomainRule(
+  id: string,
+  payload: UpdateBrowsingDomainRuleInput,
+): Promise<BrowsingSettings> {
+  const { data } = await api.patch<ApiResponse<BrowsingSettings>>(
+    `${BASE}/settings/rules/domains/${id}`,
+    payload,
+  );
+  return data.data;
+}
+
+export async function deleteBrowsingDomainRule(
+  id: string,
+): Promise<BrowsingSettings> {
+  const { data } = await api.delete<ApiResponse<BrowsingSettings>>(
+    `${BASE}/settings/rules/domains/${id}`,
+  );
+  return data.data;
 }
