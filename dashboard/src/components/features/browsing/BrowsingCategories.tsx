@@ -7,16 +7,23 @@ import { useBrowsingCategoryStats } from "@/api/useBrowsing";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { ViewModeContainer } from "@/components/ui/ViewModeContainer";
 import type { ViewModeContainerItem } from "@/components/ui/ViewModeContainer";
+import { AnalyticsPanelSkeleton } from "@/components/skeletons/AnalyticsPanelSkeleton";
 import type { ViewMode } from "@/types/ui.types";
 import { formatDurationSeconds } from "@/utils/formatDuration";
 
-const CATEGORY_STATS_LIMIT = 15;
+import type { BrowsingDrawerTrigger } from "./browsingDrawer.types";
 
 interface BrowsingCategoriesProps {
   hideHeading?: boolean;
+  onOpenDrawer?: (trigger: BrowsingDrawerTrigger) => void;
+  onTotalClick?: () => void;
 }
 
-export function BrowsingCategories({ hideHeading = false }: BrowsingCategoriesProps) {
+export function BrowsingCategories({
+  hideHeading = false,
+  onOpenDrawer,
+  onTotalClick,
+}: BrowsingCategoriesProps) {
   const [period, setPeriod] = useState<BrowsingStatsPeriod>("today");
   const [view, setView] = useState<ViewMode>("list");
   const {
@@ -24,7 +31,7 @@ export function BrowsingCategories({ hideHeading = false }: BrowsingCategoriesPr
     isLoading,
     isError,
     refetch,
-  } = useBrowsingCategoryStats({ limit: CATEGORY_STATS_LIMIT, period });
+  } = useBrowsingCategoryStats({ period });
 
   const containerData: ViewModeContainerItem[] = useMemo(
     () =>
@@ -32,6 +39,7 @@ export function BrowsingCategories({ hideHeading = false }: BrowsingCategoriesPr
         name: row.name,
         value: row.totalActiveTime,
         fill: row.color,
+        browsingCategorySlug: row.categorySlug,
       })),
     [categoryRows],
   );
@@ -69,7 +77,7 @@ export function BrowsingCategories({ hideHeading = false }: BrowsingCategoriesPr
             <h3 className="text-sm font-semibold text-gray-900">Category breakdown</h3>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
               Active time by category for {periodDescription} (productive, neutral,
-              distracting).
+              distractive).
             </p>
           </div>
         )}
@@ -98,7 +106,7 @@ export function BrowsingCategories({ hideHeading = false }: BrowsingCategoriesPr
           <h3 className="text-sm font-semibold text-gray-900">Category breakdown</h3>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
             Active time by category for {periodDescription} (productive, neutral,
-            distracting).
+            distractive).
           </p>
         </div>
       )}
@@ -121,6 +129,21 @@ export function BrowsingCategories({ hideHeading = false }: BrowsingCategoriesPr
         formatValue={(n) => formatDurationSeconds(n)}
         yAxisTickFormatter={(seconds) => formatDurationSeconds(seconds)}
         totalRow={totalRow}
+        onTotalClick={onTotalClick}
+        onItemClick={
+          onOpenDrawer
+            ? (item) => {
+                const slug = item.browsingCategorySlug?.trim();
+                if (!slug) return;
+                onOpenDrawer({
+                  type: "category-breakdown",
+                  categorySlug: slug,
+                  categoryName: item.name,
+                  period,
+                });
+              }
+            : undefined
+        }
         emptyMessage={
           view === "list"
             ? "No data available"
@@ -134,24 +157,10 @@ export function BrowsingCategories({ hideHeading = false }: BrowsingCategoriesPr
 
 function BrowsingCategoriesSkeleton({ hideHeading }: { hideHeading: boolean }) {
   return (
-    <section className={hideHeading ? "" : "mb-12"}>
-      {!hideHeading && (
-        <div className="mb-4 px-2">
-          <h3 className="text-sm font-semibold text-gray-900">Category breakdown</h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Active time grouped by site category (productive, neutral, distracting).
-          </p>
-        </div>
-      )}
-      <div className="chart-glass w-full p-6">
-        <div className="skeleton h-6 w-16 mb-6 rounded" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 mb-4">
-            <div className="skeleton h-2 flex-1 rounded-full" />
-            <div className="skeleton h-4 w-20 rounded" />
-          </div>
-        ))}
-      </div>
-    </section>
+    <AnalyticsPanelSkeleton
+      hideHeading={hideHeading}
+      sectionTitle="Category breakdown"
+      sectionDescription="Active time grouped by site category (productive, neutral, distractive)."
+    />
   );
 }
