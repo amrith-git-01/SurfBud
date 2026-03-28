@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const BrowsingRuleValueSchema = z.enum(["track", "dont_track"]);
+
 const BrowsingInteractionsSchema = z.object({
   keypresses: z.number().int().nonnegative().default(0),
   clicks: z.number().int().nonnegative().default(0),
@@ -23,6 +25,30 @@ export const BrowsingSessionSchema = z
 
 export const BrowsingSessionBatchSchema = z.object({
   sessions: z.array(BrowsingSessionSchema).min(1).max(500),
+});
+
+export const BrowsingSettingsUpdateSchema = z
+  .object({
+    trackingEnabled: z.boolean().optional(),
+    interactionTrackingEnabled: z.boolean().optional(),
+    minSessionDurationSeconds: z.number().int().min(1).max(300).optional(),
+    mergeGapSeconds: z.number().int().min(5).max(600).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field is required",
+  });
+
+export const BrowsingDomainRuleCreateSchema = z.object({
+  domain: z.string().trim().min(1, "Domain is required"),
+  rule: BrowsingRuleValueSchema,
+});
+
+export const BrowsingDomainRuleUpdateSchema = z.object({
+  rule: BrowsingRuleValueSchema,
+});
+
+export const BrowsingObjectIdParamSchema = z.object({
+  id: z.string().regex(/^[a-f0-9]{24}$/i, "Invalid ID format"),
 });
 
 export const BrowsingDrawerQuerySchema = z
@@ -68,7 +94,10 @@ export const BrowsingDrawerQuerySchema = z
       .optional(),
     categorySlug: z.string().optional(),
     productivityType: z
-      .enum(["productive", "distracting", "neutral"])
+      .enum(["productive", "distracting", "distractive", "neutral"])
+      .transform((value) =>
+        value === "distractive" ? "distracting" : value,
+      )
       .optional(),
     sort: z.enum(["newest", "oldest", "longest"]).default("newest"),
   }))
