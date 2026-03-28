@@ -264,6 +264,7 @@ export const DownloadService = {
     options: {
       page: number;
       limit: number;
+      sort?: "newest" | "oldest";
       status?: "new" | "duplicate";
       isRemoved?: boolean;
       category?: string;
