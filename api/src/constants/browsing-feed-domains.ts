@@ -3,16 +3,9 @@
  * Aligns with IGNORED_DOMAINS-style filtering so localhost / internal hosts do not appear as "sites".
  */
 const EXCLUDED_EXACT = new Set(
-  [
-    "localhost",
-    "127.0.0.1",
-    "newtab",
-    "chrome",
-    "extensions",
-    "settings",
-    "about",
-    "blank",
-  ].map((d) => d.toLowerCase()),
+  ["newtab", "chrome", "extensions", "settings", "about", "blank"].map((d) =>
+    d.toLowerCase(),
+  ),
 );
 
 export function isDomainExcludedFromBrowsingFeed(domain: string): boolean {
