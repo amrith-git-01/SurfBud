@@ -155,6 +155,7 @@ export const DownloadController = {
       {
         page: Number(q.page ?? 1),
         limit: Number(q.limit ?? 10),
+        sort: (q.sort as "newest" | "oldest") ?? "newest",
         status: q.status as "new" | "duplicate" | undefined,
         isRemoved:
           typeof q.isRemoved === "boolean"
@@ -180,13 +181,37 @@ export const DownloadController = {
 
   getCategories: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const categories = await DownloadMetricsService.getCategories(userId);
+    const timezone = req.user!.timezone ?? "UTC";
+    const q = (res.locals.validatedQuery ?? {}) as {
+      period?: "today" | "week" | "month" | "all";
+      date?: string;
+      limit?: number;
+    };
+    const categories = await DownloadMetricsService.getCategories(
+      userId,
+      timezone,
+      q.period ?? "today",
+      q.limit,
+      q.date,
+    );
     res.json({ success: true, data: { categories } });
   }),
 
   getDomains: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const domains = await DownloadMetricsService.getDomains(userId);
+    const timezone = req.user!.timezone ?? "UTC";
+    const q = (res.locals.validatedQuery ?? {}) as {
+      period?: "today" | "week" | "month" | "all";
+      date?: string;
+      limit?: number;
+    };
+    const domains = await DownloadMetricsService.getDomains(
+      userId,
+      timezone,
+      q.period ?? "today",
+      q.limit,
+      q.date,
+    );
     res.json({ success: true, data: { domains } });
   }),
 

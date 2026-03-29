@@ -41,7 +41,7 @@ export const BrowsingCategoryStatsRepository = {
     userId: string,
     from: string | null,
     to: string | null,
-    limit: number,
+    limit?: number,
     endDateLabel: string,
   ): Promise<IBrowsingCategoryStats[]> {
     const oid = new Types.ObjectId(userId);
@@ -64,7 +64,7 @@ export const BrowsingCategoryStatsRepository = {
         },
       },
       { $sort: { totalActiveTime: -1 } },
-      { $limit: limit },
+      ...(typeof limit === "number" ? ([{ $limit: limit }] as PipelineStage[]) : []),
     ];
 
     const agg = await BrowsingCategoryStats.aggregate<{

@@ -69,6 +69,27 @@ export const BrowsingSessionRepository = {
       .lean()
       .exec() as Promise<IBrowsingSession[]>;
   },
+
+  async findPaginated(
+    userId: string,
+    match: Record<string, unknown>,
+    sort: Record<string, 1 | -1>,
+    skip: number,
+    limit: number,
+  ): Promise<{ sessions: IBrowsingSession[]; total: number }> {
+    const uid = new Types.ObjectId(userId);
+    const q = { ...match, userId: uid } as Record<string, unknown>;
+    const [sessions, total] = await Promise.all([
+      BrowsingSession.find(q)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec() as Promise<IBrowsingSession[]>,
+      BrowsingSession.countDocuments(q).exec(),
+    ]);
+    return { sessions, total };
+  },
   async findForLocalDate(
     userId: string,
     timezone: string,

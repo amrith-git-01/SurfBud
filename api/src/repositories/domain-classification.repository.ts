@@ -86,6 +86,27 @@ export const DomainClassificationRepository = {
     ).exec();
   },
 
+  async findDomainsByCategorySlug(slug: string): Promise<string[]> {
+    const normalized = slug.trim().toLowerCase();
+    const docs = await DomainClassification.find({ categorySlug: normalized })
+      .select({ domain: 1 })
+      .lean()
+      .exec();
+    return docs.map((d) => d.domain as string);
+  },
+
+  async findDomainsByCategorySlugs(slugs: string[]): Promise<string[]> {
+    const unique = [...new Set(slugs.map((s) => s.trim().toLowerCase()))];
+    if (unique.length === 0) return [];
+    const docs = await DomainClassification.find({
+      categorySlug: { $in: unique },
+    })
+      .select({ domain: 1 })
+      .lean()
+      .exec();
+    return docs.map((d) => d.domain as string);
+  },
+
   async applyBrandAssets(
     domain: string,
     data: { domainLogo: string | null; domainColor: string | null },
