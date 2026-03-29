@@ -8,6 +8,7 @@ import {
 } from "../middleware/validate.middleware";
 import { DownloadController } from "../controllers/download.controller";
 import {
+  DownloadStatsDateLimitQuerySchema,
   DomainRuleCreateSchema,
   DomainRuleUpdateSchema,
   EventsQuerySchema,
@@ -115,9 +116,17 @@ downloadRouter.get(
   validateQuery(EventsQuerySchema),
   DownloadController.getEvents,
 );
-downloadRouter.get("/duplicates", DownloadController.getDuplicateGroups);
-downloadRouter.get("/categories", DownloadController.getCategories);
-downloadRouter.get("/domains", DownloadController.getDomains);
+downloadRouter.get("/duplicate-groups", DownloadController.getDuplicateGroups);
+downloadRouter.get(
+  "/categories",
+  validateQuery(DownloadStatsDateLimitQuerySchema),
+  DownloadController.getCategories,
+);
+downloadRouter.get(
+  "/domains",
+  validateQuery(DownloadStatsDateLimitQuerySchema),
+  DownloadController.getDomains,
+);
 downloadRouter.get(
   "/files/:id/timeline",
   validateParams(ObjectIdParamSchema),

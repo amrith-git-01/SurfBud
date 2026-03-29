@@ -3,7 +3,7 @@ import { authenticate } from "../middleware/auth.middleware";
 import { validate, validateQuery } from "../middleware/validate.middleware";
 import { BrowsingController } from "../controllers/browsing.controller";
 import {
-  BrowsingListQuerySchema,
+  BrowsingDrawerQuerySchema,
   BrowsingSessionBatchSchema,
   BrowsingMetricsTrendQuerySchema,
   BrowsingStatsDateLimitQuerySchema,
@@ -14,14 +14,26 @@ export const browsingRouter = Router();
 
 browsingRouter.use(authenticate);
 
-browsingRouter.get("/categories", BrowsingController.getCategories);
-
-browsingRouter.get("/metrics", BrowsingController.getMetrics);
+browsingRouter.get("/category-catalog", BrowsingController.getCategoryCatalog);
 
 browsingRouter.get(
-  "/stats/daily",
+  "/categories",
+  validateQuery(BrowsingStatsDateLimitQuerySchema),
+  BrowsingController.getCategories,
+);
+
+browsingRouter.get(
+  "/domains",
+  validateQuery(BrowsingStatsDateLimitQuerySchema),
+  BrowsingController.getDomains,
+);
+
+browsingRouter.get("/stats", BrowsingController.getStats);
+
+browsingRouter.get(
+  "/trend",
   validateQuery(BrowsingMetricsTrendQuerySchema),
-  BrowsingController.getStatsDaily,
+  BrowsingController.getTrend,
 );
 
 browsingRouter.get(
@@ -50,6 +62,6 @@ browsingRouter.post(
 
 browsingRouter.get(
   "/sessions",
-  validateQuery(BrowsingListQuerySchema),
-  BrowsingController.getRecentSessions,
+  validateQuery(BrowsingDrawerQuerySchema),
+  BrowsingController.getSessions,
 );
