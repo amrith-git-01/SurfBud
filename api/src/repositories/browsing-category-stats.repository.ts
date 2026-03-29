@@ -41,8 +41,8 @@ export const BrowsingCategoryStatsRepository = {
     userId: string,
     from: string | null,
     to: string | null,
-    limit?: number,
     endDateLabel: string,
+    limit?: number,
   ): Promise<IBrowsingCategoryStats[]> {
     const oid = new Types.ObjectId(userId);
     const dateFilter = categoryMatchClause(from, to);

@@ -141,16 +141,27 @@ export function RecentFeedSkeletonRows({
           key={i}
           className="px-3 py-2.5 border-b border-[var(--color-border)] last:border-b-0"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-2.5">
             <div className="skeleton w-7 h-7 rounded-lg" />
-            <div className="flex-1">
-              <div className="skeleton h-3 w-40 mb-2 rounded" />
-              <div
-                className={`skeleton h-3 rounded ${trailingSlot ? "w-20" : "w-28"}`}
-              />
+            <div className="min-w-0 flex-1">
+              <div className="skeleton h-3 w-44 rounded" />
+              <div className="mt-1.5 flex items-center gap-2">
+                <div className="skeleton h-2.5 w-16 rounded" />
+                <div className="skeleton h-2.5 w-2 rounded-full" />
+                <div className="skeleton h-2.5 w-14 rounded" />
+                {!trailingSlot ? (
+                  <>
+                    <div className="skeleton h-2.5 w-2 rounded-full" />
+                    <div className="skeleton h-2.5 w-20 rounded" />
+                  </>
+                ) : null}
+              </div>
             </div>
             {trailingSlot ? (
-              <div className="skeleton h-6 w-12 rounded-md" />
+              <div className="ml-2 flex items-center gap-2 self-center">
+                <div className="skeleton h-5 w-12 rounded-md" />
+                <div className="skeleton h-3.5 w-3.5 rounded" />
+              </div>
             ) : null}
           </div>
         </div>

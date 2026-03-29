@@ -1338,6 +1338,12 @@ bull:metrics-rollup:{jobId}
 bull:streak-eval:{jobId}
 ```
 
+### MongoDB — no duplicate field paths across update operators
+
+In a single `updateOne` / `findOneAndUpdate` / `bulkWrite` update document, **the same field path must not appear in more than one operator** (e.g. `$set` + `$setOnInsert`, or `$inc` + `$setOnInsert`, or `$max` + `$setOnInsert`). MongoDB rejects this with errors like *"Updating the path 'x' would create a conflict at 'x'"*.
+
+**Pattern:** keep `$setOnInsert` to **identity / insert-only** fields (e.g. `userId`, `date`, `domain`); use `$set` for mutable scalars, `$inc` for counters, `$max` for highs — without repeating those paths in `$setOnInsert`.
+
 ---
 
 ## 11. Dashboard & Charts Architecture

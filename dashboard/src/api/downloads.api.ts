@@ -94,6 +94,24 @@ export interface DomainStat {
   dupSize: number;
 }
 
+export type DownloadStatsPeriod = "today" | "week" | "month" | "all";
+
+export const DOWNLOAD_STATS_PERIOD_OPTIONS: {
+  value: DownloadStatsPeriod;
+  label: string;
+}[] = [
+    { value: "today", label: "Today" },
+    { value: "week", label: "This week" },
+    { value: "month", label: "This month" },
+    { value: "all", label: "All time" },
+  ];
+
+export interface DownloadStatsDateLimitParams {
+  period?: DownloadStatsPeriod;
+  date?: string;
+  limit?: number;
+}
+
 // ─── Drawer — file detail ───
 export interface FileDetail {
   _id: string;
@@ -114,6 +132,7 @@ export interface FileDetail {
 export interface EventsQueryParams {
   page?: number;
   limit?: number;
+  sort?: "newest" | "oldest";
   period?: "today" | "week" | "month" | "all";
   status?: "new" | "duplicate";
   isRemoved?: boolean;
@@ -213,9 +232,13 @@ export async function getDownloadTrend(
 }
 
 export async function getRecentEvents(): Promise<DownloadEvent[]> {
-  const { data } = await api.get<ApiResponse<{ events: DownloadEvent[] }>>(
-    `${BASE}/recent`,
-  );
+  const { data } = await api.get<ApiResponse<EventsResponse>>(`${BASE}/events`, {
+    params: {
+      page: 1,
+      limit: 10,
+      sort: "newest",
+    },
+  });
   return data.data?.events ?? [];
 }
 
@@ -230,21 +253,27 @@ export async function getEvents(
 
 export async function getDuplicateGroups(): Promise<DuplicateGroup[]> {
   const { data } = await api.get<ApiResponse<{ groups: DuplicateGroup[] }>>(
-    `${BASE}/duplicates`,
+    `${BASE}/duplicate-groups`,
   );
   return data.data?.groups ?? [];
 }
 
-export async function getCategories(): Promise<CategoryStat[]> {
+export async function getCategories(
+  params: DownloadStatsDateLimitParams = { period: "today" },
+): Promise<CategoryStat[]> {
   const { data } = await api.get<ApiResponse<{ categories: CategoryStat[] }>>(
     `${BASE}/categories`,
+    { params },
   );
   return data.data?.categories ?? [];
 }
 
-export async function getDomains(): Promise<DomainStat[]> {
+export async function getDomains(
+  params: DownloadStatsDateLimitParams = { period: "today" },
+): Promise<DomainStat[]> {
   const { data } = await api.get<ApiResponse<{ domains: DomainStat[] }>>(
     `${BASE}/domains`,
+    { params },
   );
   return data.data?.domains ?? [];
 }

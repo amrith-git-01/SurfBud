@@ -30,6 +30,10 @@ export default defineManifest({
         "https://surfbud.com/*",
       ],
     },
+    {
+      js: ["src/content/browsingInteraction.ts"],
+      matches: ["http://*/*", "https://*/*"],
+    },
   ],
 
   action: {

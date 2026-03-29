@@ -1,22 +1,35 @@
 import { useMemo } from "react";
-import { useBrowsingCategories, useBrowsingRecentSessions } from "@/api/useBrowsing";
+import {
+  useBrowsingCategories,
+  useBrowsingRecentSessions,
+} from "@/api/useBrowsing";
 import type { BrowsingSessionRow } from "@/api/browsing.api";
 import { RecentFeed, RecentFeedSkeletonRows } from "@/components/ui/RecentFeed";
 import { BrowsingCategoryIconBadge } from "@/components/ui/BrowsingCategoryIconBadge";
 import { formatDurationSeconds } from "@/utils/formatDuration";
 import { formatRelativeTime } from "@/utils/formatRelativeTime";
 import { Globe } from "lucide-react";
+import type { BrowsingDrawerTrigger } from "./browsingDrawer.types";
 
 const RECENT_SESSIONS_FEED_LIMIT = 10;
 
 interface RecentBrowsingFeedProps {
   hideHeading?: boolean;
+  onOpenDrawer?: (trigger: BrowsingDrawerTrigger) => void;
+  onOpenAll?: () => void;
 }
 
-export function RecentBrowsingFeed({ hideHeading = false }: RecentBrowsingFeedProps) {
-  const { data: sessions, isLoading, isError, refetch } = useBrowsingRecentSessions(
-    RECENT_SESSIONS_FEED_LIMIT,
-  );
+export function RecentBrowsingFeed({
+  hideHeading = false,
+  onOpenDrawer,
+  onOpenAll,
+}: RecentBrowsingFeedProps) {
+  const {
+    data: sessions,
+    isLoading,
+    isError,
+    refetch,
+  } = useBrowsingRecentSessions(RECENT_SESSIONS_FEED_LIMIT);
   const { data: catalog = [] } = useBrowsingCategories();
 
   const slugToMeta = useMemo(() => {
@@ -39,7 +52,7 @@ export function RecentBrowsingFeed({ hideHeading = false }: RecentBrowsingFeedPr
       errorMessage="Could not load recent sessions"
       emptyTitle="No recent sessions"
       emptyDescription="Browsing time from the extension will show up here."
-      skeleton={<RecentFeedSkeletonRows />}
+      skeleton={<RecentFeedSkeletonRows rowCount={10} />}
       hasItems={rows.length > 0}
       listRoleList
       listContent={rows.map((session) => (
@@ -51,12 +64,17 @@ export function RecentBrowsingFeed({ hideHeading = false }: RecentBrowsingFeedPr
               ? slugToMeta.get(session.categorySlug)
               : undefined
           }
+          onOpenDrawer={onOpenDrawer}
         />
       ))}
       footer={
-        <span className="text-xs text-[var(--color-text-muted)]">
-          Last {RECENT_SESSIONS_FEED_LIMIT} sessions · newest first
-        </span>
+        <button
+          type="button"
+          onClick={onOpenAll}
+          className="text-xs font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-700)] transition-colors duration-200"
+        >
+          View all sessions -&gt;
+        </button>
       }
     />
   );
@@ -72,26 +90,42 @@ function sessionDisplayTitle(session: BrowsingSessionRow): string {
 function SessionRow({
   session,
   categoryMeta,
+  onOpenDrawer,
 }: {
   session: BrowsingSessionRow;
   categoryMeta?: { icon: string; color: string };
+  onOpenDrawer?: (trigger: BrowsingDrawerTrigger) => void;
 }) {
   const title = sessionDisplayTitle(session);
   const domain = session.domain?.trim() || "unknown";
   const endedLabel = formatRelativeTime(session.endedAt);
   const durationLabel = formatDurationSeconds(session.durationSeconds);
+  const interactive = Boolean(onOpenDrawer);
 
   return (
     <div
       role="listitem"
-      className="ui-hover-row w-full text-left px-3 py-2.5 border-b border-[var(--color-border)] last:border-b-0"
+      className={`ui-hover-row w-full text-left px-3 py-2.5 border-b border-[var(--color-border)] last:border-b-0 ${interactive ? "cursor-pointer" : ""}`}
+      onClick={
+        onOpenDrawer
+          ? () => onOpenDrawer({ type: "feed-session", session })
+          : undefined
+      }
+      onKeyDown={
+        interactive && onOpenDrawer
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenDrawer({ type: "feed-session", session });
+              }
+            }
+          : undefined
+      }
+      tabIndex={interactive ? 0 : undefined}
     >
       <div className="flex items-start gap-2.5">
         <div className="self-center" aria-hidden>
-          <DomainBadge
-            session={session}
-            categoryMeta={categoryMeta}
-          />
+          <DomainBadge session={session} categoryMeta={categoryMeta} />
         </div>
 
         <div className="min-w-0 flex-1">

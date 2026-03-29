@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import {
   PieChart,
   Pie,
@@ -10,26 +10,26 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
-} from 'recharts';
-import { Globe } from 'lucide-react';
-import { ViewModeToggle } from '@/components/ui/ViewModeToggle';
-import { AnalyticsTooltip } from '@/components/ui/AnalyticsTooltip';
-import { BrowsingCategoryIconBadge } from '@/components/ui/BrowsingCategoryIconBadge';
-import type { ViewMode } from '@/types/ui.types';
+} from "recharts";
+import { Globe } from "lucide-react";
+import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
+import { AnalyticsTooltip } from "@/components/ui/AnalyticsTooltip";
+import { BrowsingCategoryIconBadge } from "@/components/ui/BrowsingCategoryIconBadge";
+import type { ViewMode } from "@/types/ui.types";
 
-const OTHERS_COLOR = '#9ca3af';
+const OTHERS_COLOR = "#9ca3af";
 
 const DEFAULT_COLORS = [
-  'var(--color-primary-500)',
-  'var(--color-accent-500)',
-  '#10b981',
-  '#f97316',
-  '#ec4899',
-  '#06b6d4',
-  '#f59e0b',
-  '#84cc16',
-  '#14b8a6',
-  '#6366f1',
+  "var(--color-primary-500)",
+  "var(--color-accent-500)",
+  "#10b981",
+  "#f97316",
+  "#ec4899",
+  "#06b6d4",
+  "#f59e0b",
+  "#84cc16",
+  "#14b8a6",
+  "#6366f1",
 ];
 
 export interface ViewModeContainerItem {
@@ -51,6 +51,12 @@ export interface ViewModeContainerItem {
   othersKeys?: string[];
   /** Domains to exclude so the drawer shows only "Others" (top N names). Pass this to onSourceOthersClick. */
   othersExcludedKeys?: string[];
+  /** Site breakdown — domain for session drawer filters. */
+  browsingDomain?: string;
+  /** Site breakdown — display label for drawer title. */
+  browsingSiteLabel?: string;
+  /** Category breakdown — slug for session drawer filters. */
+  browsingCategorySlug?: string;
 }
 
 function combinedChartLabel(item: ViewModeContainerItem): string {
@@ -58,16 +64,6 @@ function combinedChartLabel(item: ViewModeContainerItem): string {
     return `${item.name} · ${item.nameSuffix}`;
   }
   return item.name;
-}
-
-function resolvedFill(
-  item: ViewModeContainerItem,
-  paletteIndex: number,
-  palette: string[],
-): string {
-  const custom = item.fill?.trim();
-  if (custom) return custom;
-  return palette[paletteIndex % palette.length] ?? "#6b7280";
 }
 
 export interface ViewModeContainerProps {
@@ -80,7 +76,7 @@ export interface ViewModeContainerProps {
   formatValue: (n: number) => string;
   formatSecondary?: (n: number) => string;
   colors?: string[];
-  barDataKey?: 'value' | 'secondary';
+  barDataKey?: "value" | "secondary";
   emptyMessage?: string;
   className?: string;
   minHeight?: string;
@@ -101,7 +97,7 @@ export interface ViewModeContainerProps {
    * `browsing`: title left, domain + duration on the right (no valueLabel suffix in list),
    * full-width text (no truncation), logo or category icon fallback.
    */
-  listVariant?: 'default' | 'browsing';
+  listVariant?: "default" | "browsing";
 }
 
 function ListLeadingVisualBrowsing({ item }: { item: ViewModeContainerItem }) {
@@ -140,9 +136,9 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
   formatValue,
   formatSecondary = (n) => n.toLocaleString(),
   colors = DEFAULT_COLORS,
-  barDataKey = 'value',
-  emptyMessage = 'No data available',
-  className = '',
+  barDataKey = "value",
+  emptyMessage = "No data available",
+  className = "",
   minHeight,
   totalRow,
   onTotalClick,
@@ -153,12 +149,15 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
   barXAxisReduceLabels,
   barXAxisFormatTick,
   yAxisTickFormatter,
-  listVariant = 'default',
+  listVariant = "default",
 }) => {
   const hasData = data.length > 0;
   const listNumericSuffix =
-    listVariant === 'browsing' ? '' : ` ${valueLabel.toLowerCase()}`;
-  const totalValue = useMemo(() => data.reduce((s, d) => s + d.value, 0), [data]);
+    listVariant === "browsing" ? "" : ` ${valueLabel.toLowerCase()}`;
+  const totalValue = useMemo(
+    () => data.reduce((s, d) => s + d.value, 0),
+    [data],
+  );
   const chartWrapperRef = useRef<HTMLDivElement>(null);
   const [chartHeight, setChartHeight] = useState(260);
 
@@ -191,7 +190,7 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
     const topNames = top.map((d) => d.name);
     const restNames = rest.map((d) => d.name);
     const othersItem: ViewModeContainerItem = {
-      name: 'Others',
+      name: "Others",
       value: othersValue,
       secondary: othersSecondary > 0 ? othersSecondary : undefined,
       newValue: othersNew > 0 ? othersNew : undefined,
@@ -212,39 +211,38 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
     [chartData],
   );
 
-  const barChartData = useMemo(
-    () => {
-      const mapped = chartData.map((d) => ({
-        ...d,
-        name: combinedChartLabel(d),
-      }));
-      return totalRow != null
-        ? [{ ...totalRow, fill: totalRow.fill ?? "#6b7280" }, ...mapped]
-        : mapped;
-    },
-    [totalRow, chartData],
-  );
+  const barChartData = useMemo(() => {
+    const mapped = chartData.map((d) => ({
+      ...d,
+      name: combinedChartLabel(d),
+    }));
+    return totalRow != null
+      ? [{ ...totalRow, fill: totalRow.fill ?? "#6b7280" }, ...mapped]
+      : mapped;
+  }, [totalRow, chartData]);
 
   const listContent = (
-    <div
-      className="space-y-4 h-[300px] min-h-[300px] overflow-y-auto overflow-x-hidden pr-2 custom-scrollbar"
-    >
+    <div className="space-y-4 h-[300px] min-h-[300px] overflow-y-auto overflow-x-hidden pr-2 custom-scrollbar">
       {totalRow != null && (
         <div
-          role={onTotalClick ? 'button' : undefined}
+          role={onTotalClick ? "button" : undefined}
           onClick={onTotalClick}
-          className={`rounded-lg py-1 -mx-1 px-1 ${onTotalClick ? 'ui-hover-row cursor-pointer' : 'ui-hover-row cursor-default'}`}
+          className={`anim-list-item-enter rounded-lg py-1 -mx-1 px-1 ${onTotalClick ? "ui-hover-row cursor-pointer" : "ui-hover-row cursor-default"}`}
+          style={{ animationDelay: "0ms" }}
         >
           <div className="mb-1.5 flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-            <span className="text-xs font-semibold text-gray-700">{totalRow.name}</span>
+            <span className="text-xs font-semibold text-gray-700">
+              {totalRow.name}
+            </span>
             <div className="flex flex-wrap items-center justify-end gap-3">
               <span className="text-xs text-gray-500">
                 {formatValue(totalRow.value)}
                 {listNumericSuffix}
-                {(totalRow.newValue != null || totalRow.duplicateValue != null) && (
+                {(totalRow.newValue != null ||
+                  totalRow.duplicateValue != null) && (
                   <>
-                    {' '}
-                    ({totalRow.newValue?.toLocaleString() ?? 0} new,{' '}
+                    {" "}
+                    ({totalRow.newValue?.toLocaleString() ?? 0} new,{" "}
                     {totalRow.duplicateValue?.toLocaleString() ?? 0} dup)
                   </>
                 )}
@@ -259,7 +257,7 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
           <div className="h-1.5 overflow-hidden rounded-full bg-gray-200">
             <div
               className="anim-bar-fill anim-bar-fill--fast h-full w-full bg-gray-400"
-              style={{ transformOrigin: 'left' }}
+              style={{ transformOrigin: "left" }}
             />
           </div>
         </div>
@@ -270,11 +268,12 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
         return (
           <div
             key={`${item.name}-${item.nameSuffix ?? ""}-${rowIndex}`}
-            role={onItemClick ? 'button' : undefined}
+            role={onItemClick ? "button" : undefined}
             onClick={() => onItemClick?.(item)}
-            className={`ui-hover-row rounded-lg py-1 -mx-1 px-1 ${onItemClick ? 'cursor-pointer' : ''}`}
+            className={`anim-list-item-enter ui-hover-row rounded-lg py-1 -mx-1 px-1 ${onItemClick ? "cursor-pointer" : ""}`}
+            style={{ animationDelay: `${Math.min(rowIndex + 1, 10) * 28}ms` }}
           >
-            {listVariant === 'browsing' ? (
+            {listVariant === "browsing" ? (
               <div className="mb-1.5 flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <ListLeadingVisualBrowsing item={item} />
@@ -286,7 +285,7 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
                   </span>
                 </div>
                 <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-x-2 text-xs text-gray-500">
-                  {item.nameSuffix != null && item.nameSuffix !== '' ? (
+                  {item.nameSuffix != null && item.nameSuffix !== "" ? (
                     <>
                       <span
                         className="break-all text-right font-mono text-gray-500"
@@ -294,7 +293,10 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
                       >
                         {item.nameSuffix}
                       </span>
-                      <span className="shrink-0 select-none text-gray-300" aria-hidden>
+                      <span
+                        className="shrink-0 select-none text-gray-300"
+                        aria-hidden
+                      >
                         ·
                       </span>
                     </>
@@ -316,18 +318,21 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
                   className="flex min-w-0 max-w-[60%] items-center gap-2 text-xs font-medium text-gray-700"
                   title={listTitle}
                 >
-                  {item.iconUrl?.trim() ?
+                  {item.iconUrl?.trim() ? (
                     <img
                       src={item.iconUrl.trim()}
                       alt=""
                       className="h-5 w-5 shrink-0 rounded-md object-contain"
                       referrerPolicy="no-referrer"
                     />
-                  : null}
+                  ) : null}
                   <span className="truncate">{item.name}</span>
-                  {item.nameSuffix != null && item.nameSuffix !== '' ? (
+                  {item.nameSuffix != null && item.nameSuffix !== "" ? (
                     <>
-                      <span className="shrink-0 select-none text-gray-300" aria-hidden>
+                      <span
+                        className="shrink-0 select-none text-gray-300"
+                        aria-hidden
+                      >
                         ·
                       </span>
                       <span className="min-w-0 truncate font-mono text-xs font-normal text-gray-500">
@@ -342,8 +347,8 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
                     {listNumericSuffix}
                     {(item.newValue != null || item.duplicateValue != null) && (
                       <>
-                        {' '}
-                        ({item.newValue?.toLocaleString() ?? 0} new,{' '}
+                        {" "}
+                        ({item.newValue?.toLocaleString() ?? 0} new,{" "}
                         {item.duplicateValue?.toLocaleString() ?? 0} dup)
                       </>
                     )}
@@ -357,10 +362,16 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
               </div>
             )}
             <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
-              <div className="h-full overflow-hidden" style={{ width: `${pct}%` }}>
+              <div
+                className="h-full overflow-hidden"
+                style={{ width: `${pct}%` }}
+              >
                 <div
                   className="anim-bar-fill anim-bar-fill--fast h-full w-full"
-                  style={{ transformOrigin: 'left', backgroundColor: item.fill }}
+                  style={{
+                    transformOrigin: "left",
+                    backgroundColor: item.fill,
+                  }}
                 />
               </div>
             </div>
@@ -383,7 +394,9 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
             nameKey="name"
             stroke="none"
             label={({ name, percent }) =>
-              (percent ?? 0) > 0.05 ? `${name} ${((percent ?? 0) * 100).toFixed(0)}%` : ''
+              (percent ?? 0) > 0.05
+                ? `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                : ""
             }
             labelLine={false}
             cursor="pointer"
@@ -401,13 +414,14 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
             }}
           >
             {chartDataForCharts.map((entry, index) => (
-              <Cell key={index} fill={entry.fill ?? '#6b7280'} />
+              <Cell key={index} fill={entry.fill ?? "#6b7280"} />
             ))}
           </Pie>
           <Tooltip
             content={(props) => {
               if (!props.active || !props.payload?.length) return null;
-              const item = props.payload[0]?.payload as ViewModeContainerItem & { fill?: string };
+              const item = props.payload[0]
+                ?.payload as ViewModeContainerItem & { fill?: string };
               if (!item) return null;
               return (
                 <AnalyticsTooltip
@@ -440,10 +454,14 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
             left: yAxisTickFormatter ? 4 : -10,
           }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="#f0f0f0"
+            vertical={false}
+          />
           <XAxis
             dataKey="name"
-            tick={{ fontSize: 10, fill: '#6b7280' }}
+            tick={{ fontSize: 10, fill: "#6b7280" }}
             axisLine={false}
             tickLine={false}
             interval={
@@ -454,7 +472,7 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
             tickFormatter={barXAxisFormatTick}
           />
           <YAxis
-            tick={{ fontSize: 10, fill: '#9ca3af' }}
+            tick={{ fontSize: 10, fill: "#9ca3af" }}
             axisLine={false}
             tickLine={false}
             width={yAxisTickFormatter ? 72 : undefined}
@@ -486,7 +504,7 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
             dataKey={barDataKey}
             radius={[4, 4, 0, 0]}
             barSize={28}
-            cursor={onChartClick ? 'pointer' : undefined}
+            cursor={onChartClick ? "pointer" : undefined}
             onClick={(data: unknown) => {
               const row = data as ViewModeContainerItem & { fill?: string };
               if (row?.name == null) return;
@@ -501,7 +519,7 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
             }}
           >
             {barChartData.map((entry, index) => (
-              <Cell key={index} fill={entry.fill ?? '#6b7280'} />
+              <Cell key={index} fill={entry.fill ?? "#6b7280"} />
             ))}
           </Bar>
         </BarChart>
@@ -531,9 +549,9 @@ export const ViewModeContainer: React.FC<ViewModeContainerProps> = ({
           </div>
         ) : (
           <>
-            {view === 'list' && listContent}
-            {view === 'pie' && pieContent}
-            {view === 'bar' && barContent}
+            {view === "list" && listContent}
+            {view === "pie" && pieContent}
+            {view === "bar" && barContent}
           </>
         )}
       </div>

@@ -23,6 +23,7 @@ import {
   updateRoutingFolder,
   deleteRoutingFolder,
   cancelRemoval,
+  type DownloadStatsDateLimitParams,
   type EventsQueryParams,
   type UpdateDownloadSettingsInput,
   type CreateDomainRuleInput,
@@ -41,8 +42,12 @@ export const downloadKeys = {
   events: (params: EventsQueryParams) =>
     [...downloadKeys.all, "events", params] as const,
   duplicates: () => [...downloadKeys.all, "duplicates"] as const,
-  categories: () => [...downloadKeys.all, "categories"] as const,
-  domains: () => [...downloadKeys.all, "domains"] as const,
+  categoriesAll: () => [...downloadKeys.all, "categories"] as const,
+  categories: (params: DownloadStatsDateLimitParams) =>
+    [...downloadKeys.all, "categories", params] as const,
+  domainsAll: () => [...downloadKeys.all, "domains"] as const,
+  domains: (params: DownloadStatsDateLimitParams) =>
+    [...downloadKeys.all, "domains", params] as const,
   file: (id: string) => [...downloadKeys.all, "file", id] as const,
   fileTimeline: (id: string) =>
     [...downloadKeys.all, "file", id, "timeline"] as const,
@@ -133,28 +138,30 @@ export function useDuplicateGroups(
 
 /** Section 6 — file categories */
 export function useCategories(
+  params: DownloadStatsDateLimitParams = { period: "today" },
   options?: Omit<
     UseQueryOptions<CategoriesResult>,
     "queryKey" | "queryFn"
   >,
 ) {
   return useQuery({
-    queryKey: downloadKeys.categories(),
-    queryFn: getCategories,
+    queryKey: downloadKeys.categories(params),
+    queryFn: () => getCategories(params),
     ...options,
   });
 }
 
 /** Section 6 — download sources (domains) */
 export function useDomains(
+  params: DownloadStatsDateLimitParams = { period: "today" },
   options?: Omit<
     UseQueryOptions<DomainsResult>,
     "queryKey" | "queryFn"
   >,
 ) {
   return useQuery({
-    queryKey: downloadKeys.domains(),
-    queryFn: getDomains,
+    queryKey: downloadKeys.domains(params),
+    queryFn: () => getDomains(params),
     ...options,
   });
 }

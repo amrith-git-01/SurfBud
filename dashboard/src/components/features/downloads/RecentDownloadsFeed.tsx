@@ -46,7 +46,7 @@ export function RecentDownloadsFeed({
       errorMessage="Could not load recent downloads"
       emptyTitle="No recent downloads"
       emptyDescription="Recent downloads will appear here."
-      skeleton={<RecentFeedSkeletonRows trailingSlot />}
+      skeleton={<RecentFeedSkeletonRows trailingSlot rowCount={10} />}
       hasItems={rows.length > 0}
       listContent={rows.map((event) => (
         <DownloadEventRow

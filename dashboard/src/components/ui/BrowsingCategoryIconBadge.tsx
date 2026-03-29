@@ -18,9 +18,8 @@ function tintedBackground(color: string): string | undefined {
 }
 
 function resolveLucideIcon(iconName: string): LucideIcon {
-  const Icon = (LucideIcons as Record<string, LucideIcon | undefined>)[
-    iconName.trim()
-  ];
+  const icons = LucideIcons as unknown as Record<string, LucideIcon | undefined>;
+  const Icon = icons[iconName.trim()];
   return Icon ?? LucideIcons.Folder;
 }
 
@@ -28,13 +27,14 @@ export interface BrowsingCategoryIconBadgeProps {
   /** PascalCase name matching lucide-react export (e.g. `Code`, `Briefcase`). */
   iconName: string;
   color: string;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   className?: string;
 }
 
 const sizeClasses = {
   sm: { box: "h-5 w-5", icon: "h-3 w-3" },
   md: { box: "h-7 w-7", icon: "h-4 w-4" },
+  lg: { box: "h-10 w-10", icon: "h-5 w-5" },
 } as const;
 
 /**

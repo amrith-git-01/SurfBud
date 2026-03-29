@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { BrowsingSessionService } from "../services/browsing-session.service";
 import { BrowsingMetricsService } from "../services/browsing-metrics.service";
 import { BrowsingTimelineService } from "../services/browsing-timeline.service";
+import { BrowsingSettingsService } from "../services/browsing-settings.service";
 import type {
   BrowsingDrawerQueryInput,
   BrowsingStatsPeriod,
@@ -10,7 +11,85 @@ import type {
 import type { BrowsingSessionBatchPayload } from "../types/shared/browsing.types";
 import { logger } from "../utils/logger";
 
+function toApiProductivityType<T extends string | null | undefined>(
+  productivityType: T,
+): T {
+  if (productivityType == null) {
+    return productivityType;
+  }
+  return (productivityType === "distracting"
+    ? "distractive"
+    : productivityType) as T;
+}
+
+function mapRowProductivity<T extends { productivityType?: string | null }>(
+  row: T,
+): T {
+  return {
+    ...row,
+    productivityType: toApiProductivityType(row.productivityType),
+  };
+}
+
+function mapTimelineProductivity<T extends { productivity: string }>(
+  block: T,
+): T {
+  return {
+    ...block,
+    productivity: toApiProductivityType(block.productivity),
+  };
+}
+
 export const BrowsingController = {
+  getSettings: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const settings = await BrowsingSettingsService.getSettings(userId);
+    res.json({ success: true, data: settings });
+  }),
+
+  updateSettings: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const settings = await BrowsingSettingsService.updateSettings(
+      userId,
+      req.body,
+    );
+    res.json({ success: true, data: settings });
+  }),
+
+  getDomainRules: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const domainRules = await BrowsingSettingsService.getDomainRules(userId);
+    res.json({ success: true, data: { domainRules } });
+  }),
+
+  createDomainRule: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const settings = await BrowsingSettingsService.createDomainRule(
+      userId,
+      req.body,
+    );
+    res.status(201).json({ success: true, data: settings });
+  }),
+
+  updateDomainRule: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const settings = await BrowsingSettingsService.updateDomainRule(
+      userId,
+      req.params.id as string,
+      req.body,
+    );
+    res.json({ success: true, data: settings });
+  }),
+
+  deleteDomainRule: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const settings = await BrowsingSettingsService.deleteDomainRule(
+      userId,
+      req.params.id as string,
+    );
+    res.json({ success: true, data: settings });
+  }),
+
   ingestBatch: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const body = req.body as BrowsingSessionBatchPayload;
@@ -48,7 +127,7 @@ export const BrowsingController = {
     const categories = await BrowsingSessionService.getCategories();
     res.json({
       success: true,
-      data: categories,
+      data: categories.map((category) => mapRowProductivity(category)),
     });
   }),
 
@@ -69,7 +148,13 @@ export const BrowsingController = {
         q.limit,
         q.date,
       );
-    res.json({ success: true, data: { domains, totalActiveTime } });
+    res.json({
+      success: true,
+      data: {
+        domains: domains.map((domain) => mapRowProductivity(domain)),
+        totalActiveTime,
+      },
+    });
   }),
 
   getCategories: asyncHandler(async (req: Request, res: Response) => {
@@ -88,7 +173,12 @@ export const BrowsingController = {
       q.limit,
       q.date,
     );
-    res.json({ success: true, data: { categories } });
+    res.json({
+      success: true,
+      data: {
+        categories: categories.map((category) => mapRowProductivity(category)),
+      },
+    });
   }),
 
   getSessions: asyncHandler(async (req: Request, res: Response) => {
@@ -113,7 +203,7 @@ export const BrowsingController = {
       res.json({
         success: true,
         data: {
-          sessions,
+          sessions: sessions.map((session) => mapRowProductivity(session)),
           total: sessions.length,
           page: 1,
           totalPages: sessions.length === 0 ? 0 : 1,
@@ -130,7 +220,10 @@ export const BrowsingController = {
 
     res.json({
       success: true,
-      data: result,
+      data: {
+        ...result,
+        sessions: result.sessions.map((session) => mapRowProductivity(session)),
+      },
     });
   }),
 
@@ -172,7 +265,13 @@ export const BrowsingController = {
         q.limit,
         q.date,
       );
-    res.json({ success: true, data: { domains, totalActiveTime } });
+    res.json({
+      success: true,
+      data: {
+        domains: domains.map((domain) => mapRowProductivity(domain)),
+        totalActiveTime,
+      },
+    });
   }),
 
   getStatsTimeline: asyncHandler(async (req: Request, res: Response) => {
@@ -187,7 +286,11 @@ export const BrowsingController = {
     );
     res.json({
       success: true,
-      data: { date: dateStr, timezone: tz, blocks },
+      data: {
+        date: dateStr,
+        timezone: tz,
+        blocks: blocks.map((block) => mapTimelineProductivity(block)),
+      },
     });
   }),
 
@@ -207,6 +310,11 @@ export const BrowsingController = {
       q.limit,
       q.date,
     );
-    res.json({ success: true, data: { categories } });
+    res.json({
+      success: true,
+      data: {
+        categories: categories.map((category) => mapRowProductivity(category)),
+      },
+    });
   }),
 };

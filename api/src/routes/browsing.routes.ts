@@ -1,9 +1,17 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
-import { validate, validateQuery } from "../middleware/validate.middleware";
+import {
+  validate,
+  validateParams,
+  validateQuery,
+} from "../middleware/validate.middleware";
 import { BrowsingController } from "../controllers/browsing.controller";
 import {
+  BrowsingDomainRuleCreateSchema,
+  BrowsingDomainRuleUpdateSchema,
   BrowsingDrawerQuerySchema,
+  BrowsingObjectIdParamSchema,
+  BrowsingSettingsUpdateSchema,
   BrowsingSessionBatchSchema,
   BrowsingMetricsTrendQuerySchema,
   BrowsingStatsDateLimitQuerySchema,
@@ -13,6 +21,31 @@ import {
 export const browsingRouter = Router();
 
 browsingRouter.use(authenticate);
+
+browsingRouter.get("/settings", BrowsingController.getSettings);
+browsingRouter.patch(
+  "/settings",
+  validate(BrowsingSettingsUpdateSchema),
+  BrowsingController.updateSettings,
+);
+
+browsingRouter.get("/settings/rules/domains", BrowsingController.getDomainRules);
+browsingRouter.post(
+  "/settings/rules/domains",
+  validate(BrowsingDomainRuleCreateSchema),
+  BrowsingController.createDomainRule,
+);
+browsingRouter.patch(
+  "/settings/rules/domains/:id",
+  validateParams(BrowsingObjectIdParamSchema),
+  validate(BrowsingDomainRuleUpdateSchema),
+  BrowsingController.updateDomainRule,
+);
+browsingRouter.delete(
+  "/settings/rules/domains/:id",
+  validateParams(BrowsingObjectIdParamSchema),
+  BrowsingController.deleteDomainRule,
+);
 
 browsingRouter.get("/category-catalog", BrowsingController.getCategoryCatalog);
 

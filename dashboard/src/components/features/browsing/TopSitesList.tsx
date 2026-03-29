@@ -3,12 +3,16 @@ import {
   BROWSING_STATS_PERIOD_OPTIONS,
   type BrowsingStatsPeriod,
 } from "@/api/browsing.api";
-import { useBrowsingCategories, useBrowsingDomainStats } from "@/api/useBrowsing";
+import {
+  useBrowsingCategories,
+  useBrowsingDomainStats,
+} from "@/api/useBrowsing";
 import { Dropdown } from "@/components/ui/Dropdown";
 import {
   ViewModeContainer,
   type ViewModeContainerItem,
 } from "@/components/ui/ViewModeContainer";
+import { AnalyticsPanelSkeleton } from "@/components/skeletons/AnalyticsPanelSkeleton";
 import type { ViewMode } from "@/types/ui.types";
 import { formatDurationSeconds } from "@/utils/formatDuration";
 
@@ -27,20 +31,34 @@ const SOURCE_COLORS = [
 ];
 
 const TOP_SITES_SHOWN = 5;
-const DOMAIN_FETCH_LIMIT = 8;
+const TOP_SITES_CHART_LIMIT = 7;
+
+function formatSiteTickLabel(label: string): string {
+  const [primary, secondary] = label.split(" \u00b7 ");
+  const base = (primary?.trim() || secondary?.trim() || label).replace(/^www\./i, "");
+  return base.length > 14 ? `${base.slice(0, 13)}\u2026` : base;
+}
+
+import type { BrowsingDrawerTrigger } from "./browsingDrawer.types";
 
 interface TopSitesListProps {
   hideHeading?: boolean;
+  onOpenDrawer?: (trigger: BrowsingDrawerTrigger) => void;
+  onTotalClick?: () => void;
 }
 
-export function TopSitesList({ hideHeading = false }: TopSitesListProps) {
+export function TopSitesList({
+  hideHeading = false,
+  onOpenDrawer,
+  onTotalClick,
+}: TopSitesListProps) {
   const [period, setPeriod] = useState<BrowsingStatsPeriod>("today");
   const {
     data: domainPayload,
     isLoading: domainsLoading,
     isError: domainsError,
     refetch: refetchDomains,
-  } = useBrowsingDomainStats({ limit: DOMAIN_FETCH_LIMIT, period });
+  } = useBrowsingDomainStats({ period });
   const domains = domainPayload?.domains ?? [];
   const periodTotalActive = domainPayload?.totalActiveTime ?? 0;
   const { data: catalog = [] } = useBrowsingCategories();
@@ -85,9 +103,9 @@ export function TopSitesList({ hideHeading = false }: TopSitesListProps) {
         SOURCE_COLORS[idx % SOURCE_COLORS.length];
       const domain = row.domain.trim();
       const label = row.label?.trim() ?? "";
-      const same =
-        !label || label.toLowerCase() === domain.toLowerCase();
+      const same = !label || label.toLowerCase() === domain.toLowerCase();
       const categoryIcon = slugToIcon.get(row.categorySlug);
+      const siteLabel = row.label?.trim() || domain;
       items.push({
         name: same ? domain : label,
         nameSuffix: same ? undefined : domain,
@@ -96,6 +114,8 @@ export function TopSitesList({ hideHeading = false }: TopSitesListProps) {
         iconUrl: row.domainLogo?.trim() || undefined,
         categoryIcon: categoryIcon ?? undefined,
         categoryColor: fill,
+        browsingDomain: domain,
+        browsingSiteLabel: siteLabel,
       });
     });
     if (rowsModel.showOther) {
@@ -141,7 +161,9 @@ export function TopSitesList({ hideHeading = false }: TopSitesListProps) {
       <section className={hideHeading ? "" : "mb-12"}>
         {!hideHeading && (
           <div className="mb-4 px-2">
-            <h3 className="text-sm font-semibold text-gray-900">Site breakdown</h3>
+            <h3 className="text-sm font-semibold text-gray-900">
+              Site breakdown
+            </h3>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
               Active time by domain and share of your total time for{" "}
               {periodDescription}.
@@ -170,7 +192,9 @@ export function TopSitesList({ hideHeading = false }: TopSitesListProps) {
     <div className="w-full">
       {!hideHeading && (
         <div className="mb-4 px-2">
-          <h3 className="text-sm font-semibold text-gray-900">Site breakdown</h3>
+          <h3 className="text-sm font-semibold text-gray-900">
+            Site breakdown
+          </h3>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
             Active time by domain and share of your total time today.
           </p>
@@ -196,7 +220,63 @@ export function TopSitesList({ hideHeading = false }: TopSitesListProps) {
         formatValue={(n) => formatDurationSeconds(n)}
         yAxisTickFormatter={(seconds) => formatDurationSeconds(seconds)}
         totalRow={totalRow}
+        onTotalClick={onTotalClick}
+        onItemClick={
+          onOpenDrawer
+            ? (item) => {
+                if (item.name === "Others") {
+                  const excludedDomains = rowsModel.top
+                    .map((row) => row.domain.trim().toLowerCase())
+                    .filter((domain) => domain.length > 0);
+                  onOpenDrawer({
+                    type: "site-breakdown-others",
+                    excludedDomains,
+                    period,
+                  });
+                  return;
+                }
+                if (!item.browsingDomain) return;
+                onOpenDrawer({
+                  type: "site-breakdown",
+                  domain: item.browsingDomain,
+                  label: item.browsingSiteLabel ?? item.browsingDomain,
+                  period,
+                });
+              }
+            : undefined
+        }
+        onChartClick={
+          onOpenDrawer
+            ? (item) => {
+                if (item.name === "Total") {
+                  onTotalClick?.();
+                  return;
+                }
+                if (item.name === "Others") {
+                  const excludedDomains = rowsModel.top
+                    .map((row) => row.domain.trim().toLowerCase())
+                    .filter((domain) => domain.length > 0);
+                  onOpenDrawer({
+                    type: "site-breakdown-others",
+                    excludedDomains,
+                    period,
+                  });
+                  return;
+                }
+                if (!item.browsingDomain) return;
+                onOpenDrawer({
+                  type: "site-breakdown",
+                  domain: item.browsingDomain,
+                  label: item.browsingSiteLabel ?? item.browsingDomain,
+                  period,
+                });
+              }
+            : undefined
+        }
         colors={SOURCE_COLORS}
+        topN={TOP_SITES_CHART_LIMIT}
+        barXAxisReduceLabels
+        barXAxisFormatTick={formatSiteTickLabel}
         emptyMessage={
           view === "list"
             ? "No data available"
@@ -210,24 +290,10 @@ export function TopSitesList({ hideHeading = false }: TopSitesListProps) {
 
 function TopSitesListSkeleton({ hideHeading }: { hideHeading: boolean }) {
   return (
-    <section className={hideHeading ? "" : "mb-12"}>
-      {!hideHeading && (
-        <div className="mb-4 px-2">
-          <h3 className="text-sm font-semibold text-gray-900">Site breakdown</h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Active time by domain and share of your total time today.
-          </p>
-        </div>
-      )}
-      <div className="chart-glass w-full p-6">
-        <div className="skeleton h-6 w-16 mb-6 rounded" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 mb-4">
-            <div className="skeleton h-2 flex-1 rounded-full" />
-            <div className="skeleton h-4 w-24 rounded" />
-          </div>
-        ))}
-      </div>
-    </section>
+    <AnalyticsPanelSkeleton
+      hideHeading={hideHeading}
+      sectionTitle="Site breakdown"
+      sectionDescription="Active time by domain and share of your total time today."
+    />
   );
 }

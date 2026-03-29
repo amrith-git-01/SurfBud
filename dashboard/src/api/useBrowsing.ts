@@ -1,26 +1,35 @@
 import {
   useQuery,
+  useMutation,
   useQueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import {
-  getBrowsingMetrics,
-  getBrowsingCategories,
-  getBrowsingStatsDaily,
+  createBrowsingDomainRule,
+  deleteBrowsingDomainRule,
+  getBrowsingStats,
+  getBrowsingSettings,
+  getBrowsingCategoryCatalog,
+  getBrowsingDomainRules,
+  getBrowsingTrend,
   getBrowsingStatsDomains,
   getBrowsingStatsCategories,
   getBrowsingRecentSessions,
   getBrowsingStatsTimeline,
+  updateBrowsingDomainRule,
+  updateBrowsingSettings,
+  type CreateBrowsingDomainRuleInput,
   type BrowsingStatsDateLimitParams,
   type BrowsingTimelineParams,
+  type UpdateBrowsingDomainRuleInput,
+  type UpdateBrowsingSettingsInput,
 } from "./browsing.api";
 
 export const browsingKeys = {
   all: ["browsing"] as const,
-  metrics: () => [...browsingKeys.all, "metrics"] as const,
+  stats: () => [...browsingKeys.all, "stats"] as const,
   categories: () => [...browsingKeys.all, "categories"] as const,
-  dailyTrend: (period: number) =>
-    [...browsingKeys.all, "stats", "daily", period] as const,
+  trend: (period: number) => [...browsingKeys.all, "trend", period] as const,
   domainStats: (params: BrowsingStatsDateLimitParams) =>
     [...browsingKeys.all, "stats", "domains", params] as const,
   categoryStats: (params: BrowsingStatsDateLimitParams) =>
@@ -29,22 +38,28 @@ export const browsingKeys = {
     [...browsingKeys.all, "sessions", limit] as const,
   timeline: (params: BrowsingTimelineParams) =>
     [...browsingKeys.all, "stats", "timeline", params] as const,
+  settings: () => [...browsingKeys.all, "settings"] as const,
+  domainRules: () => [...browsingKeys.all, "settings", "domain-rules"] as const,
 };
 
-type MetricsResult = Awaited<ReturnType<typeof getBrowsingMetrics>>;
-type CategoriesResult = Awaited<ReturnType<typeof getBrowsingCategories>>;
-type DailyTrendResult = Awaited<ReturnType<typeof getBrowsingStatsDaily>>;
+type MetricsResult = Awaited<ReturnType<typeof getBrowsingStats>>;
+type CategoriesResult = Awaited<ReturnType<typeof getBrowsingCategoryCatalog>>;
+type TrendResult = Awaited<ReturnType<typeof getBrowsingTrend>>;
 type DomainStatsResult = Awaited<ReturnType<typeof getBrowsingStatsDomains>>;
-type CategoryStatsResult = Awaited<ReturnType<typeof getBrowsingStatsCategories>>;
+type CategoryStatsResult = Awaited<
+  ReturnType<typeof getBrowsingStatsCategories>
+>;
 type SessionsResult = Awaited<ReturnType<typeof getBrowsingRecentSessions>>;
 type TimelineResult = Awaited<ReturnType<typeof getBrowsingStatsTimeline>>;
+type BrowsingSettingsResult = Awaited<ReturnType<typeof getBrowsingSettings>>;
+type BrowsingDomainRulesResult = Awaited<ReturnType<typeof getBrowsingDomainRules>>;
 
-export function useBrowsingMetrics(
+export function useBrowsingStats(
   options?: Omit<UseQueryOptions<MetricsResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
-    queryKey: browsingKeys.metrics(),
-    queryFn: getBrowsingMetrics,
+    queryKey: browsingKeys.stats(),
+    queryFn: getBrowsingStats,
     ...options,
   });
 }
@@ -54,18 +69,18 @@ export function useBrowsingCategories(
 ) {
   return useQuery({
     queryKey: browsingKeys.categories(),
-    queryFn: getBrowsingCategories,
+    queryFn: getBrowsingCategoryCatalog,
     ...options,
   });
 }
 
-export function useBrowsingDailyTrend(
+export function useBrowsingTrend(
   period: 7 | 15 | 30 = 7,
-  options?: Omit<UseQueryOptions<DailyTrendResult>, "queryKey" | "queryFn">,
+  options?: Omit<UseQueryOptions<TrendResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
-    queryKey: browsingKeys.dailyTrend(period),
-    queryFn: () => getBrowsingStatsDaily(period),
+    queryKey: browsingKeys.trend(period),
+    queryFn: () => getBrowsingTrend(period),
     ...options,
   });
 }
@@ -112,6 +127,80 @@ export function useBrowsingDailyTimeline(
     queryFn: () => getBrowsingStatsTimeline(params),
     staleTime: 30_000,
     ...options,
+  });
+}
+
+export function useBrowsingSettings(
+  options?: Omit<UseQueryOptions<BrowsingSettingsResult>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: browsingKeys.settings(),
+    queryFn: getBrowsingSettings,
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export function useBrowsingDomainRules(
+  options?: Omit<UseQueryOptions<BrowsingDomainRulesResult>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: browsingKeys.domainRules(),
+    queryFn: getBrowsingDomainRules,
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export function useUpdateBrowsingSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdateBrowsingSettingsInput) =>
+      updateBrowsingSettings(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: browsingKeys.settings() });
+      void queryClient.invalidateQueries({ queryKey: browsingKeys.domainRules() });
+    },
+  });
+}
+
+export function useCreateBrowsingDomainRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateBrowsingDomainRuleInput) =>
+      createBrowsingDomainRule(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: browsingKeys.settings() });
+      void queryClient.invalidateQueries({ queryKey: browsingKeys.domainRules() });
+    },
+  });
+}
+
+export function useUpdateBrowsingDomainRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: UpdateBrowsingDomainRuleInput;
+    }) => updateBrowsingDomainRule(id, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: browsingKeys.settings() });
+      void queryClient.invalidateQueries({ queryKey: browsingKeys.domainRules() });
+    },
+  });
+}
+
+export function useDeleteBrowsingDomainRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteBrowsingDomainRule(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: browsingKeys.settings() });
+      void queryClient.invalidateQueries({ queryKey: browsingKeys.domainRules() });
+    },
   });
 }
 

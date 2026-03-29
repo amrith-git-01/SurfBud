@@ -1,17 +1,9 @@
-import {
-  Crown,
-  Globe,
-  Sparkles,
-  Target,
-  Timer,
-} from "lucide-react";
-import { useBrowsingMetrics } from "@/api/useBrowsing";
+import { Crown, Globe, Sparkles, Target, Timer } from "lucide-react";
+import { useBrowsingStats } from "@/api/useBrowsing";
 import { MetricCard } from "@/components/ui/MetricCard";
-import {
-  toCountDelta,
-  toDurationDelta,
-} from "@/utils/browsingMetricDeltas";
+import { toCountDelta, toDurationDelta } from "@/utils/browsingMetricDeltas";
 import { formatDurationSeconds } from "@/utils/formatDuration";
+import type { BrowsingDrawerTrigger } from "./browsingDrawer.types";
 
 function formatSessionTimeRange(
   startIso: string | null | undefined,
@@ -28,16 +20,23 @@ function formatSessionTimeRange(
   return `${start.toLocaleTimeString(undefined, opts)} – ${end.toLocaleTimeString(undefined, opts)}`;
 }
 
-export function BrowsingMetricCards() {
-  const { data: metrics, isLoading, isError, refetch } = useBrowsingMetrics();
+interface BrowsingMetricCardsProps {
+  onOpenDrawer?: (trigger: BrowsingDrawerTrigger) => void;
+}
+
+export function BrowsingMetricCards({ onOpenDrawer }: BrowsingMetricCardsProps) {
+  const { data: metrics, isLoading, isError, refetch } = useBrowsingStats();
 
   if (isError) {
     return (
       <section className="mb-12">
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900">Overview Cards</h3>
+          <h3 className="text-sm font-semibold text-gray-900">
+            Overview Cards
+          </h3>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Snapshot of time online, sites visited, focus, and top site for today.
+            Snapshot of time online, sites visited, focus, and top site for
+            today.
           </p>
         </div>
         <div
@@ -63,9 +62,7 @@ export function BrowsingMetricCards() {
   const p = metrics?.prev;
 
   const activeTimeDelta =
-    t && p
-      ? toDurationDelta(t.totalActiveTime, p.todayTotalTime)
-      : undefined;
+    t && p ? toDurationDelta(t.totalActiveTime, p.todayTotalTime) : undefined;
 
   const sitesDelta =
     t && p
@@ -110,7 +107,9 @@ export function BrowsingMetricCards() {
       : "0m";
 
   const isLongestSessionEmpty =
-    !t?.longestSessionStart || !t?.longestSessionEnd || (t?.longestSession ?? 0) <= 0;
+    !t?.longestSessionStart ||
+    !t?.longestSessionEnd ||
+    (t?.longestSession ?? 0) <= 0;
 
   const longestSessionValue = isLongestSessionEmpty
     ? "—"
@@ -133,6 +132,9 @@ export function BrowsingMetricCards() {
           value={timeOnlineValue}
           delta={activeTimeDelta}
           skeleton={isLoading}
+          onClick={
+            onOpenDrawer ? () => onOpenDrawer({ type: "time-online" }) : undefined
+          }
         />
         <MetricCard
           label="SITES VISITED"
@@ -140,6 +142,9 @@ export function BrowsingMetricCards() {
           value={t?.sitesVisited ?? 0}
           delta={sitesDelta}
           skeleton={isLoading}
+          onClick={
+            onOpenDrawer ? () => onOpenDrawer({ type: "sites-visited" }) : undefined
+          }
         />
         <MetricCard
           label="TOP SITE"
@@ -151,6 +156,16 @@ export function BrowsingMetricCards() {
             ) : undefined
           }
           skeleton={isLoading}
+          onClick={
+            onOpenDrawer
+              ? () =>
+                  onOpenDrawer({
+                    type: "top-site",
+                    domain: topDomain ?? "",
+                    label: topLabel ?? topDomain ?? "Top Site",
+                  })
+              : undefined
+          }
         />
         <MetricCard
           label="FOCUS SCORE"
@@ -158,6 +173,9 @@ export function BrowsingMetricCards() {
           value={focusValue}
           delta={focusDelta}
           skeleton={isLoading}
+          onClick={
+            onOpenDrawer ? () => onOpenDrawer({ type: "focus-score" }) : undefined
+          }
         />
         <MetricCard
           label="LONGEST SESSION"
@@ -170,6 +188,9 @@ export function BrowsingMetricCards() {
             ) : undefined
           }
           skeleton={isLoading}
+          onClick={
+            onOpenDrawer ? () => onOpenDrawer({ type: "longest-session" }) : undefined
+          }
         />
       </div>
       {!isLoading && !metrics && (

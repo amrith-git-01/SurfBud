@@ -4,15 +4,99 @@ import type {
   ExtensionSession,
   OpenSession,
 } from "../types/shared/browsing.types";
+import type { BrowsingSettings } from "../types/shared/browsing-settings.types";
 import { extractDomain } from "../utils/downloadHelpers";
 
 const OPEN_SESSION_KEY = "browsingOpenSession";
 const CLOSED_SESSIONS_KEY = "browsingClosedSessions";
 const BATCH_ALARM_NAME = "browsing-batch-send";
+const BROWSING_SETTINGS_STORAGE_KEY = "browsingSettings";
 
-const MIN_DURATION_SECONDS = 10;
-const MERGE_GAP_SECONDS = 30;
-const BATCH_INTERVAL_MINUTES = 60;
+const BATCH_POST_RETRY_DELAYS_MS = [2000, 5000, 12000] as const;
+const API_BASE = "http://localhost:3001/api";
+const AUTH_STORAGE_KEY = "authToken";
+
+const DEFAULT_BROWSING_SETTINGS: BrowsingSettings = {
+  trackingEnabled: true,
+  interactionTrackingEnabled: true,
+  minSessionDurationSeconds: 10,
+  mergeGapSeconds: 30,
+  domainRules: [],
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function getAuthToken(): Promise<string | null> {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get([AUTH_STORAGE_KEY], (result) => {
+      const token = (result as Record<string, unknown>)[AUTH_STORAGE_KEY];
+      resolve(typeof token === "string" && token.trim().length > 0 ? token : null);
+    });
+  });
+}
+
+function normalizeDomain(input: string): string {
+  if (!input) return "";
+
+  try {
+    const url = new URL(
+      input.startsWith("http://") || input.startsWith("https://")
+        ? input
+        : `https://${input}`,
+    );
+    return (url.hostname ?? "").toLowerCase();
+  } catch {
+    return input.trim().toLowerCase();
+  }
+}
+
+function getDomainRuleValue(
+  settings: BrowsingSettings,
+  sourceDomain: string,
+): "track" | "dont_track" | null {
+  const normalized = normalizeDomain(sourceDomain);
+  if (!normalized) return null;
+
+  const rule = settings.domainRules.find(
+    (item) => item.domain.toLowerCase() === normalized,
+  );
+  return rule?.rule ?? null;
+}
+
+function shouldTrackBrowsingSession(
+  settings: BrowsingSettings,
+  sourceDomain: string,
+): boolean {
+  if (!settings.trackingEnabled) {
+    return false;
+  }
+
+  const domainRule = getDomainRuleValue(settings, sourceDomain);
+  if (domainRule === "dont_track") {
+    return false;
+  }
+
+  return true;
+}
+
+async function getStoredBrowsingSettings(): Promise<BrowsingSettings> {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get([BROWSING_SETTINGS_STORAGE_KEY], (result) => {
+      const stored = result[BROWSING_SETTINGS_STORAGE_KEY] as
+        | BrowsingSettings
+        | undefined;
+      resolve({
+        ...DEFAULT_BROWSING_SETTINGS,
+        ...(stored ?? {}),
+        domainRules: stored?.domainRules ?? DEFAULT_BROWSING_SETTINGS.domainRules,
+      });
+    });
+  });
+}
 
 // ────────────────────────────
 // Storage helpers
@@ -70,6 +154,13 @@ export async function handleTabBecameActive(
     await closeCurrentSession();
     return;
   }
+
+  const settings = await getStoredBrowsingSettings();
+  if (!shouldTrackBrowsingSession(settings, domain)) {
+    await closeCurrentSession();
+    return;
+  }
+
   const now = new Date();
   const open = await getOpenSession();
 
@@ -87,7 +178,7 @@ export async function handleTabBecameActive(
   if (last && last.domain === domain) {
     const lastEndedAt = new Date(last.endedAt);
     const gapSeconds = (now.getTime() - lastEndedAt.getTime()) / 1000;
-    if (gapSeconds < MERGE_GAP_SECONDS) {
+    if (gapSeconds < settings.mergeGapSeconds) {
       const reopened: OpenSession = {
         ...last,
         tabId,
@@ -116,6 +207,7 @@ export async function handleTabBecameActive(
 }
 
 export async function closeCurrentSession(): Promise<void> {
+  const settings = await getStoredBrowsingSettings();
   const open = await getOpenSession();
   if (!open) return;
   const now = new Date();
@@ -125,7 +217,7 @@ export async function closeCurrentSession(): Promise<void> {
     Math.round((now.getTime() - startedAt.getTime()) / 1000),
   );
   // Drop very short sessions entirely
-  if (durationSeconds < MIN_DURATION_SECONDS) {
+  if (durationSeconds < settings.minSessionDurationSeconds) {
     await setOpenSession(undefined);
     return;
   }
@@ -162,6 +254,11 @@ export type BrowsingInteractionKind = "key" | "click" | "scroll";
 export async function recordInteraction(
   kind: BrowsingInteractionKind,
 ): Promise<void> {
+  const settings = await getStoredBrowsingSettings();
+  if (!settings.trackingEnabled || !settings.interactionTrackingEnabled) {
+    return;
+  }
+
   const open = await getOpenSession();
   if (!open) return;
   const interactions = { ...open.interactions };
@@ -178,22 +275,71 @@ export async function recordInteraction(
 // ────────────────────────────
 // Batching
 // ────────────────────────────
-export async function ensureBrowsingBatchAlarm(): Promise<void> {
-  const alarm = await chrome.alarms.get(BATCH_ALARM_NAME);
-  if (!alarm) {
-    await chrome.alarms.create(BATCH_ALARM_NAME, {
-      periodInMinutes: BATCH_INTERVAL_MINUTES,
-    });
-  }
+
+function getNextHourBoundaryMs(from: Date = new Date()): number {
+  const next = new Date(from);
+  next.setMinutes(0, 0, 0);
+  next.setHours(next.getHours() + 1);
+  return next.getTime();
 }
-export async function handleAlarm(alarmName: string): Promise<void> {
-  if (alarmName !== BATCH_ALARM_NAME) return;
+
+/**
+ * (Re)schedules the next batch push for the local top-of-hour boundary
+ * (e.g. 12:00, 1:00, 2:00). Same alarm name replaces the previous schedule.
+ */
+export async function ensureBrowsingBatchAlarm(): Promise<void> {
+  const when = getNextHourBoundaryMs();
+  await chrome.alarms.create(BATCH_ALARM_NAME, {
+    when,
+  });
+}
+
+/**
+ * POST queued browsing sessions; clears queue only on success.
+ * Retries a few times so transient API/network blips do not wait a full hour.
+ */
+export async function flushBrowsingSessionsQueue(): Promise<void> {
   const sessions = await getClosedSessions();
   if (!sessions.length) return;
-  // TODO: replace this with real API call when backend is ready.
-  // For now, just log and clear to verify behaviour.
-  console.info("[SurfBud] Flushing browsing sessions batch", sessions);
-  await setClosedSessions([]);
+  const token = await getAuthToken();
+  if (!token) return;
+
+  const maxAttempts = BATCH_POST_RETRY_DELAYS_MS.length + 1;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(`${API_BASE}/browsing/sessions/batch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ sessions }),
+      });
+
+      if (response.ok) {
+        await setClosedSessions([]);
+        return;
+      }
+
+      if (response.status < 500) {
+        return;
+      }
+    } catch {
+      /* network error — retry */
+    }
+
+    const delay = BATCH_POST_RETRY_DELAYS_MS[attempt];
+    if (delay !== undefined) {
+      await sleep(delay);
+    }
+  }
+}
+
+export async function handleAlarm(alarmName: string): Promise<void> {
+  if (alarmName !== BATCH_ALARM_NAME) return;
+  await ensureBrowsingBatchAlarm();
+  await flushBrowsingSessionsQueue();
 }
 export function getBrowsingBatchAlarmName(): string {
   return BATCH_ALARM_NAME;

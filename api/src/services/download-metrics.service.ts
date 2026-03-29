@@ -138,11 +138,33 @@ export const DownloadMetricsService = {
     };
   },
 
-  async getCategories(userId: string, limit?: number) {
-    return CategoryStatsRepository.findByUserId(userId, limit);
+  async getCategories(
+    userId: string,
+    timezone: string,
+    period: "today" | "week" | "month" | "all" = "today",
+    limit?: number,
+    date?: string,
+  ) {
+    return DownloadEventRepository.aggregateCategoriesByPeriod(userId, {
+      period,
+      date,
+      timezone,
+      limit,
+    });
   },
 
-  async getDomains(userId: string, limit?: number) {
-    return DomainStatsRepository.findByUserId(userId, limit);
+  async getDomains(
+    userId: string,
+    timezone: string,
+    period: "today" | "week" | "month" | "all" = "today",
+    limit?: number,
+    date?: string,
+  ) {
+    return DownloadEventRepository.aggregateDomainsByPeriod(userId, {
+      period,
+      date,
+      timezone,
+      limit,
+    });
   },
 };

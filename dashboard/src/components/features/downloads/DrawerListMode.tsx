@@ -1,16 +1,11 @@
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { DownloadEvent } from "../../../api/downloads.api";
-import { Dropdown } from "../../ui/Dropdown";
+import { DrawerListLayout } from "../../ui/DrawerListLayout";
 import { FileIcon } from "../../ui/FileIcon";
 import { StatusBadge } from "../../ui/StatusBadge";
-import { TextField } from "../../ui/TextField";
+import { DrawerListCardsSkeleton } from "@/components/skeletons/DrawerListCardsSkeleton";
 import { formatBytes } from "../../../utils/formatBytes";
-import type {
-  DrawerCategoryFilter,
-  DrawerPeriod,
-  DrawerStatusFilter,
-} from "./FileDetailDrawer";
-
+import { useEffect, useState } from "react";
 interface DrawerListModeProps {
   title: string;
   total: number;
@@ -20,12 +15,6 @@ interface DrawerListModeProps {
   onRetry: () => void;
   searchInput: string;
   onSearchInputChange: (value: string) => void;
-  period: DrawerPeriod;
-  onPeriodChange: (value: DrawerPeriod) => void;
-  status: DrawerStatusFilter;
-  onStatusChange: (value: DrawerStatusFilter) => void;
-  category: DrawerCategoryFilter;
-  onCategoryChange: (value: DrawerCategoryFilter) => void;
   page: number;
   totalPages: number;
   onPrevPage: () => void;
@@ -33,32 +22,6 @@ interface DrawerListModeProps {
   onSelectFile: (fileId: string, eventId: string) => void;
   onClose: () => void;
 }
-
-const PERIOD_OPTIONS = [
-  { value: "today", label: "Today" },
-  { value: "week", label: "This Week" },
-  { value: "month", label: "This Month" },
-  { value: "all", label: "All Time" },
-] as const;
-
-const STATUS_OPTIONS = [
-  { value: "all", label: "All Statuses" },
-  { value: "new", label: "New" },
-  { value: "duplicate", label: "Duplicate" },
-] as const;
-
-const CATEGORY_OPTIONS = [
-  { value: "all", label: "All Categories" },
-  { value: "document", label: "Document" },
-  { value: "image", label: "Image" },
-  { value: "text", label: "Text" },
-  { value: "code", label: "Code" },
-  { value: "executable", label: "Executable" },
-  { value: "archive", label: "Archive" },
-  { value: "audio", label: "Audio" },
-  { value: "video", label: "Video" },
-  { value: "other", label: "Other" },
-] as const;
 
 export function DrawerListMode({
   title,
@@ -69,12 +32,6 @@ export function DrawerListMode({
   onRetry,
   searchInput,
   onSearchInputChange,
-  period,
-  onPeriodChange,
-  status,
-  onStatusChange,
-  category,
-  onCategoryChange,
   page,
   totalPages,
   onPrevPage,
@@ -82,81 +39,64 @@ export function DrawerListMode({
   onSelectFile,
   onClose,
 }: DrawerListModeProps) {
+  const [listAnimSeed, setListAnimSeed] = useState(0);
+
+  useEffect(() => {
+    if (!isLoading && !isError) {
+      setListAnimSeed((seed) => seed + 1);
+    }
+  }, [isLoading, isError, page, searchInput]);
+
   return (
-    <div className="flex h-full flex-col bg-white font-sans">
-      <header className="px-6 py-4 border-b border-[var(--color-border)]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3
-              className="text-xl font-semibold text-[var(--color-text-strong)]"
-              style={{ fontFamily: "var(--font-display)" }}
+    <DrawerListLayout
+      title={title}
+      subtitle={`${total} files found`}
+      onClose={onClose}
+      searchInput={searchInput}
+      onSearchInputChange={onSearchInputChange}
+      searchPlaceholder="Search by filename..."
+      listClassName={
+        !isLoading && !isError && events.length === 0
+          ? "flex items-center justify-center"
+          : undefined
+      }
+      footer={
+        <footer className="sticky bottom-0 border-t border-[var(--color-border)] bg-white px-6 py-3">
+          <div className="flex items-center justify-center gap-3">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={onPrevPage}
+              aria-label="Previous page"
+              className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {title}
-            </h3>
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              {total} files found
+              <ChevronLeft size={16} />
+            </button>
+
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              Page {page} of {totalPages}
             </p>
+
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={onNextPage}
+              aria-label="Next page"
+              className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight size={16} />
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close drawer"
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text-body)]"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </header>
-
-      <div className="px-6 py-3 border-b border-[var(--color-border)]">
-        <TextField
-          label="Search"
-          showLabel={false}
-          type="text"
-          value={searchInput}
-          onChange={onSearchInputChange}
-          onClear={() => onSearchInputChange("")}
-          placeholder="Search by filename..."
-          containerClassName="space-y-0"
-          className="rounded-lg border border-[var(--color-border)] bg-white py-2 text-xs text-[var(--color-text-body)] placeholder:text-[var(--color-text-muted)]"
+        </footer>
+      }
+    >
+      {isLoading ? (
+        <DrawerListCardsSkeleton
+          rowCount={10}
+          iconSizeClass="h-8 w-8"
+          trailingVariant="badgeWithChevron"
         />
-
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <Dropdown
-            size="sm"
-            value={category}
-            options={[...CATEGORY_OPTIONS]}
-            onChange={(value) => onCategoryChange(value as DrawerCategoryFilter)}
-            buttonClassName="w-full justify-between"
-            align="left"
-          />
-          <Dropdown
-            size="sm"
-            value={status}
-            options={[...STATUS_OPTIONS]}
-            onChange={(value) => onStatusChange(value as DrawerStatusFilter)}
-            buttonClassName="w-full justify-between"
-            align="left"
-          />
-          <Dropdown
-            size="sm"
-            value={period}
-            options={[...PERIOD_OPTIONS]}
-            onChange={(value) => onPeriodChange(value as DrawerPeriod)}
-            buttonClassName="w-full justify-between"
-            align="left"
-          />
-        </div>
-      </div>
-
-      <div
-        className={[
-          "flex-1 overflow-y-auto p-3",
-          !isLoading && !isError && events.length === 0 ? "flex items-center justify-center" : "",
-        ].join(" ")}
-      >
-        {isLoading ? <ListSkeleton /> : null}
+      ) : null}
 
         {!isLoading && isError ? (
           <div className="px-6 py-8 text-center">
@@ -179,14 +119,14 @@ export function DrawerListMode({
               No downloads found
             </p>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              Try adjusting filters
+              Try a different search term
             </p>
           </div>
         ) : null}
 
         {!isLoading &&
           !isError &&
-          events.map((event) => {
+          events.map((event, index) => {
             const fileId = getEventFileId(event);
             const fileCategory = getEventCategory(event);
             const fileSize = getEventSize(event);
@@ -194,24 +134,25 @@ export function DrawerListMode({
 
             return (
               <button
-                key={event._id}
+                key={`${listAnimSeed}-${event._id}`}
                 type="button"
                 onClick={() => {
                   if (!fileId) return;
                   onSelectFile(fileId, event._id);
                 }}
                 disabled={!isClickable}
-                className="mb-3 w-full rounded-xl border border-[var(--color-border)] bg-white text-left transition-colors duration-150 hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="anim-list-item-enter ui-hover-row mb-3 w-full cursor-pointer rounded-xl border border-[var(--color-border)] bg-white text-left transition-colors duration-150 hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ animationDelay: `${Math.min(index, 9) * 30}ms` }}
               >
-                <div className="px-6 py-3">
+                <div className="px-5 py-2.5">
                   <div className="flex items-center gap-3">
                     <FileIcon category={fileCategory} size="md" />
 
                     <div className="min-w-0 flex-1">
-                      <p className="text-base font-semibold text-[var(--color-text-strong)] truncate">
+                      <p className="truncate text-[13px] font-medium leading-snug text-[var(--color-text-strong)]">
                         {event.filename}
                       </p>
-                      <div className="mt-1 flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+                      <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
                         <span className="font-mono text-[var(--color-text-secondary)]">
                           {event.sourceDomain || "unknown"}
                         </span>
@@ -226,45 +167,16 @@ export function DrawerListMode({
                       </div>
                     </div>
 
-                    <div className="ml-3 flex items-center gap-2">
+                    <div className="ml-2 flex items-center gap-2 self-center">
                       <StatusBadge status={event.status} />
-                      <ChevronRight size={16} className="text-[var(--color-text-muted)]" aria-hidden />
+                      <ChevronRight size={14} className="text-[var(--color-text-muted)]" aria-hidden />
                     </div>
                   </div>
                 </div>
               </button>
             );
           })}
-      </div>
-
-      <footer className="sticky bottom-0 border-t border-[var(--color-border)] bg-white px-6 py-3">
-        <div className="flex items-center justify-center gap-3">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={onPrevPage}
-            aria-label="Previous page"
-            className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-bg-page)] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            Page {page} of {totalPages}
-          </p>
-
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={onNextPage}
-            aria-label="Next page"
-            className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-bg-page)] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </footer>
-    </div>
+    </DrawerListLayout>
   );
 }
 
@@ -295,21 +207,3 @@ function toRelativeTime(iso: string): string {
   return `${Math.floor(diffSeconds / 86_400)}d ago`;
 }
 
-function ListSkeleton() {
-  return (
-    <div>
-      {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="px-6 py-3 border-b border-[var(--color-border)]">
-          <div className="flex items-center gap-3">
-            <div className="skeleton w-8 h-8 rounded-lg" />
-            <div className="flex-1">
-              <div className="skeleton h-3 w-44 rounded mb-2" />
-              <div className="skeleton h-3 w-24 rounded" />
-            </div>
-            <div className="skeleton h-5 w-12 rounded-md" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}

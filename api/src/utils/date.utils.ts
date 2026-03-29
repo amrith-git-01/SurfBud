@@ -70,6 +70,14 @@ export function getStatsPeriodDateBounds(
 }
 
 /**
+ * Last instant of the given calendar day in `timezone` (end of local day).
+ */
+export function endOfDateInTimezone(dateStr: string, timezone: string): Date {
+  const start = startOfDateInTimezone(dateStr, timezone);
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+}
+
+/**
  * Returns a Date (UTC instant) representing midnight at the start of the given
  * date string (YYYY-MM-DD) in the given IANA timezone.
  */

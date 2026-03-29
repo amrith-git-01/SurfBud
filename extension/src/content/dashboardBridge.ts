@@ -1,5 +1,6 @@
 /// <reference types="chrome" />
 import type { DownloadSettingsSyncPayload } from "../types/shared/download-settings.types";
+import type { BrowsingSettingsSyncPayload } from "../types/shared/browsing-settings.types";
 
 interface AuthSuccessPayload {
   user: { userId: string; displayName: string };
@@ -18,7 +19,11 @@ window.addEventListener("message", (event: MessageEvent) => {
   try {
     if (event.source !== window) return;
     const msg = event.data;
-    if (msg?.type !== "SURFBUD_AUTH_SUCCESS" && msg?.type !== "SURFBUD_SETTINGS_SYNC") {
+    if (
+      msg?.type !== "SURFBUD_AUTH_SUCCESS" &&
+      msg?.type !== "SURFBUD_SETTINGS_SYNC" &&
+      msg?.type !== "SURFBUD_BROWSING_SETTINGS_SYNC"
+    ) {
       return;
     }
 
@@ -60,6 +65,26 @@ window.addEventListener("message", (event: MessageEvent) => {
           const runtimeError = chrome.runtime.lastError;
           if (runtimeError) {
             console.warn("[SurfBud Bridge] SETTINGS_SYNC forward failed:", runtimeError.message);
+          }
+        },
+      );
+      return;
+    }
+
+    if (msg.type === "SURFBUD_BROWSING_SETTINGS_SYNC" && msg.payload) {
+      const payload = msg.payload as BrowsingSettingsSyncPayload;
+      send(
+        {
+          type: "BROWSING_SETTINGS_SYNC",
+          payload,
+        },
+        () => {
+          const runtimeError = chrome.runtime.lastError;
+          if (runtimeError) {
+            console.warn(
+              "[SurfBud Bridge] BROWSING_SETTINGS_SYNC forward failed:",
+              runtimeError.message,
+            );
           }
         },
       );

@@ -24,6 +24,7 @@ import { FileIcon } from '@/components/ui/FileIcon';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/TextField';
 import { OnOffToggle } from './OnOffToggle';
+import { ConfigureSectionSkeleton } from './shared/ConfigureSectionSkeleton';
 import './DownloadRoutingSection.css';
 
 interface DownloadRoutingSectionProps {
@@ -170,7 +171,7 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
                 event.stopPropagation();
                 data.onDeleteConfirm(data.folder._id);
               }}
-              className="inline-flex h-7 items-center justify-center rounded-lg border border-[var(--color-danger)] px-3 text-xs font-medium text-[var(--color-danger)] hover:bg-red-50"
+              className="inline-flex h-7 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-danger)] px-3 text-xs font-medium text-[var(--color-danger)] hover:bg-red-50"
             >
               Delete
             </button>
@@ -180,7 +181,7 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
                 event.stopPropagation();
                 data.onDeleteCancel();
               }}
-              className="inline-flex h-7 items-center justify-center rounded-lg border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+              className="inline-flex h-7 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
             >
               Cancel
             </button>
@@ -215,7 +216,7 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
                 event.stopPropagation();
                 data.onEditCancel();
               }}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
               aria-label="Cancel rename"
             >
               <X className="h-3.5 w-3.5" />
@@ -226,7 +227,7 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
                 event.stopPropagation();
                 data.onEditCommit(data.folder._id);
               }}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
+              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
               aria-label="Save folder name"
             >
               <Check className="h-3.5 w-3.5" />
@@ -259,7 +260,7 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
                   event.stopPropagation();
                   data.onEditStart(data.folder._id, data.folder.folderName);
                 }}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Rename folder"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -271,7 +272,7 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
                   event.stopPropagation();
                   data.onDeleteStart(data.folder._id);
                 }}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-danger)] hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-danger)] hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Delete folder"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -316,7 +317,7 @@ function RoutingEdge({
           <button
             type="button"
             onClick={() => data.onDisconnect(data.folderId)}
-            className="nodrag nopan inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-primary)] bg-white text-[var(--color-primary)] shadow-sm hover:bg-[var(--color-primary-light)]"
+            className="nodrag nopan inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[var(--color-primary)] bg-white text-[var(--color-primary)] shadow-sm hover:bg-[var(--color-primary-light)]"
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
@@ -569,16 +570,10 @@ export function DownloadRoutingSection({
 
   if (isLoading) {
     return (
-      <section>
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
-            Download routing
-          </h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Map file categories to subfolders in your Downloads directory.
-          </p>
-        </div>
-        <div className="card-metric-glass mt-4 p-5">
+      <ConfigureSectionSkeleton
+        title="Download routing"
+        description="Map file categories to subfolders in your Downloads directory."
+      >
           <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
               <div className="skeleton h-4 w-44 rounded" />
@@ -586,9 +581,27 @@ export function DownloadRoutingSection({
             </div>
             <div className="skeleton h-[24px] w-[44px] rounded-full" />
           </div>
-          <div className="skeleton mt-4 h-[420px] w-full rounded-2xl" />
-        </div>
-      </section>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div className="skeleton h-8 w-full rounded-lg" />
+            <div className="skeleton h-8 w-28 rounded-md" />
+          </div>
+
+          <div className="mt-4 h-[540px] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white/70 p-4">
+            <div className="grid h-full grid-cols-2 gap-6">
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="skeleton h-[58px] w-full rounded-xl" />
+                ))}
+              </div>
+              <div className="space-y-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="skeleton h-[90px] w-full rounded-xl" />
+                ))}
+              </div>
+            </div>
+          </div>
+      </ConfigureSectionSkeleton>
     );
   }
 

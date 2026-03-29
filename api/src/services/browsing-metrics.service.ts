@@ -740,7 +740,7 @@ export const BrowsingMetricsService = {
     userId: string,
     timezone: string,
     period: BrowsingStatsPeriod,
-    limit: number,
+    limit?: number,
     anchorDate?: string,
   ): Promise<{
     domains: BrowsingDomainStatsPeriodRow[];
@@ -753,8 +753,8 @@ export const BrowsingMetricsService = {
         userId,
         from,
         to,
-        limit,
         endDateLabel,
+        limit,
       );
     const domainKeys = [...new Set(rows.map((r) => r.domain))];
     const classifications =
@@ -789,7 +789,7 @@ export const BrowsingMetricsService = {
     userId: string,
     timezone: string,
     period: BrowsingStatsPeriod,
-    limit: number,
+    limit?: number,
     anchorDate?: string,
   ) {
     const { from, to } = getStatsPeriodDateBounds(period, timezone, anchorDate);
@@ -799,8 +799,8 @@ export const BrowsingMetricsService = {
         userId,
         from,
         to,
-        limit,
         endDateLabel,
+        limit,
       );
     const catalog = await BrowsingCategoryRepository.findAllActive();
     const catBySlug = new Map(catalog.map((c) => [c.slug, c]));

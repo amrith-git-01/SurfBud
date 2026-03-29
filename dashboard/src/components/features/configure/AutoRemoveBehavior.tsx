@@ -1,5 +1,6 @@
 import type { GracePeriodMinutes, GracePeriodType } from '@/api/downloads.api';
 import { Dropdown } from '@/components/ui/Dropdown';
+import { ConfigureSectionSkeleton } from './shared/ConfigureSectionSkeleton';
 
 interface AutoRemoveBehaviorProps {
   autoRemoveEnabled: boolean;
@@ -29,23 +30,24 @@ export function AutoRemoveBehavior({
 }: AutoRemoveBehaviorProps) {
   if (isLoading) {
     return (
-      <section>
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
-            Auto remove behavior
-          </h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Choose when duplicate files should be removed.
-          </p>
-        </div>
-        <div className="card-metric-glass p-5 mt-4">
-          <div className="space-y-4">
-            <div className="skeleton h-4 w-48 rounded" />
-            <div className="skeleton h-4 w-56 rounded" />
-            <div className="skeleton h-8 w-28 rounded" />
+      <ConfigureSectionSkeleton
+        title="Auto remove behavior"
+        description="Choose when duplicate files should be removed."
+      >
+          <div className="space-y-4" aria-hidden>
+            <div className="flex items-center gap-2.5">
+              <div className="skeleton h-3 w-3 rounded-full" />
+              <div className="skeleton h-4 w-40 rounded" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="skeleton h-3 w-3 rounded-full" />
+                <div className="skeleton h-4 w-28 rounded" />
+              </div>
+              <div className="skeleton h-8 w-[104px] rounded-md" />
+            </div>
           </div>
-        </div>
-      </section>
+      </ConfigureSectionSkeleton>
     );
   }
 
