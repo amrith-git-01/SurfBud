@@ -44,12 +44,51 @@ export const BrowsingController = {
     });
   }),
 
-  getCategories: asyncHandler(async (_req: Request, res: Response) => {
+  getCategoryCatalog: asyncHandler(async (_req: Request, res: Response) => {
     const categories = await BrowsingSessionService.getCategories();
     res.json({
       success: true,
       data: categories,
     });
+  }),
+
+  getDomains: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const tz = req.user!.timezone ?? "UTC";
+    const q = (res.locals.validatedQuery ?? {}) as {
+      period?: BrowsingStatsPeriod;
+      date?: string;
+      limit?: number;
+    };
+    const period = q.period ?? "today";
+    const { domains, totalActiveTime } =
+      await BrowsingMetricsService.getDomainsForStatsPeriod(
+        userId,
+        tz,
+        period,
+        q.limit,
+        q.date,
+      );
+    res.json({ success: true, data: { domains, totalActiveTime } });
+  }),
+
+  getCategories: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const tz = req.user!.timezone ?? "UTC";
+    const q = (res.locals.validatedQuery ?? {}) as {
+      period?: BrowsingStatsPeriod;
+      date?: string;
+      limit?: number;
+    };
+    const period = q.period ?? "today";
+    const categories = await BrowsingMetricsService.getCategoriesForStatsPeriod(
+      userId,
+      tz,
+      period,
+      q.limit,
+      q.date,
+    );
+    res.json({ success: true, data: { categories } });
   }),
 
   getSessions: asyncHandler(async (req: Request, res: Response) => {
@@ -65,6 +104,7 @@ export const BrowsingController = {
       !q.from &&
       !q.to &&
       !q.domain &&
+      (!q.excludeDomains || q.excludeDomains.length === 0) &&
       !q.categorySlug &&
       !q.productivityType;
 
@@ -124,13 +164,12 @@ export const BrowsingController = {
       limit?: number;
     };
     const period = q.period ?? "today";
-    const limit = q.limit ?? 10;
     const { domains, totalActiveTime } =
       await BrowsingMetricsService.getDomainsForStatsPeriod(
         userId,
         tz,
         period,
-        limit,
+        q.limit,
         q.date,
       );
     res.json({ success: true, data: { domains, totalActiveTime } });
@@ -161,12 +200,11 @@ export const BrowsingController = {
       limit?: number;
     };
     const period = q.period ?? "today";
-    const limit = q.limit ?? 10;
     const categories = await BrowsingMetricsService.getCategoriesForStatsPeriod(
       userId,
       tz,
       period,
-      limit,
+      q.limit,
       q.date,
     );
     res.json({ success: true, data: { categories } });

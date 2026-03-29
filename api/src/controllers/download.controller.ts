@@ -181,13 +181,37 @@ export const DownloadController = {
 
   getCategories: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const categories = await DownloadMetricsService.getCategories(userId);
+    const timezone = req.user!.timezone ?? "UTC";
+    const q = (res.locals.validatedQuery ?? {}) as {
+      period?: "today" | "week" | "month" | "all";
+      date?: string;
+      limit?: number;
+    };
+    const categories = await DownloadMetricsService.getCategories(
+      userId,
+      timezone,
+      q.period ?? "today",
+      q.limit,
+      q.date,
+    );
     res.json({ success: true, data: { categories } });
   }),
 
   getDomains: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const domains = await DownloadMetricsService.getDomains(userId);
+    const timezone = req.user!.timezone ?? "UTC";
+    const q = (res.locals.validatedQuery ?? {}) as {
+      period?: "today" | "week" | "month" | "all";
+      date?: string;
+      limit?: number;
+    };
+    const domains = await DownloadMetricsService.getDomains(
+      userId,
+      timezone,
+      q.period ?? "today",
+      q.limit,
+      q.date,
+    );
     res.json({ success: true, data: { domains } });
   }),
 
