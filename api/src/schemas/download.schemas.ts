@@ -53,6 +53,15 @@ export const TrendQuerySchema = z.object({
   period: z.enum(["7", "15", "30"]).default("7"),
 });
 
+export const DownloadStatsDateLimitQuerySchema = z.object({
+  period: z.enum(["today", "week", "month", "all"]).default("today"),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format")
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
 export const UpdateDownloadSettingsSchema = z
   .object({
     trackingEnabled: z.boolean().optional(),
@@ -110,6 +119,7 @@ export const EventsQuerySchema = z.preprocess(
   z.object({
     page: z.coerce.number().int().positive().default(1),
     limit: z.coerce.number().int().positive().max(50).default(10),
+    sort: z.enum(["newest", "oldest"]).default("newest"),
     status: z.enum(["new", "duplicate"]).optional(),
     isRemoved: z.preprocess((value) => {
       if (typeof value === "boolean") return value;
