@@ -26,6 +26,7 @@ export interface CreateDownloadEventDto {
 export interface QueryOptions {
   page: number;
   limit: number;
+  sort?: "newest" | "oldest";
   status?: "new" | "duplicate";
   isRemoved?: boolean;
   category?: string;
@@ -53,6 +54,33 @@ export interface TrendBucket {
   total: number;
   newFiles: number;
   duplicates: number;
+}
+
+export interface CategoryStatsRow {
+  category: string;
+  totalCount: number;
+  newCount: number;
+  dupCount: number;
+  totalSize: number;
+  newSize: number;
+  dupSize: number;
+}
+
+export interface DomainStatsRow {
+  domain: string;
+  totalCount: number;
+  newCount: number;
+  dupCount: number;
+  totalSize: number;
+  newSize: number;
+  dupSize: number;
+}
+
+export interface StatsPeriodOptions {
+  period: "today" | "week" | "month" | "all";
+  date?: string;
+  timezone?: string;
+  limit?: number;
 }
 
 export interface RemovalLookupInput {
@@ -94,6 +122,31 @@ function getRemovalLookupFilter(input: RemovalLookupInput): {
   return filter;
 }
 
+function buildDateRangeMatch(
+  options: StatsPeriodOptions,
+): Record<string, unknown> | undefined {
+  const timezone = options.timezone ?? "UTC";
+
+  if (options.date) {
+    const dayStart = startOfDateInTimezone(options.date, timezone);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    return { $gte: dayStart, $lt: dayEnd };
+  }
+
+  if (options.period === "all") {
+    return undefined;
+  }
+
+  const now = new Date();
+  const boundaries = {
+    today: startOfDateInTimezone(toDateString(now, timezone), timezone),
+    week: startOfDateInTimezone(getMondayString(now, timezone), timezone),
+    month: startOfDateInTimezone(getMonthStartString(now, timezone), timezone),
+  };
+
+  return { $gte: boundaries[options.period] };
+}
+
 export const DownloadEventRepository = {
   async create(data: CreateDownloadEventDto): Promise<IDownloadEvent> {
     const doc = await DownloadEvent.create({
@@ -126,8 +179,13 @@ export const DownloadEventRepository = {
     if (options.status) match.status = options.status;
     if (options.isRemoved !== undefined) match.isRemoved = options.isRemoved;
     if (options.search) {
-      const escapedSearch = options.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      match.filename = new RegExp(escapedSearch, "i");
+      // If search is a valid MongoDB ObjectId, search by event _id instead of filename
+      if (Types.ObjectId.isValid(options.search)) {
+        match._id = new Types.ObjectId(options.search);
+      } else {
+        const escapedSearch = options.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        match.filename = new RegExp(escapedSearch, "i");
+      }
     }
     if (options.domain) {
       const escapedDomain = options.domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -174,7 +232,8 @@ export const DownloadEventRepository = {
       });
     }
 
-    pipeline.push({ $sort: { createdAt: -1 } });
+    const sortDirection = options.sort === "oldest" ? 1 : -1;
+    pipeline.push({ $sort: { createdAt: sortDirection } });
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: options.limit });
 
@@ -228,6 +287,178 @@ export const DownloadEventRepository = {
       .sort({ createdAt: -1 })
       .lean()
       .exec() as Promise<IDownloadEvent[]>;
+  },
+
+  async aggregateCategoriesByPeriod(
+    userId: string,
+    options: StatsPeriodOptions,
+  ): Promise<CategoryStatsRow[]> {
+    const match: Record<string, unknown> = {
+      userId: new Types.ObjectId(userId),
+    };
+    const createdAt = buildDateRangeMatch(options);
+    if (createdAt) {
+      match.createdAt = createdAt;
+    }
+
+    const pipeline: PipelineStage[] = [
+      { $match: match },
+      {
+        $lookup: {
+          from: "files",
+          localField: "fileId",
+          foreignField: "_id",
+          as: "fileDoc",
+        },
+      },
+      {
+        $unwind: {
+          path: "$fileDoc",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          _category: {
+            $toLower: { $ifNull: ["$fileDoc.fileCategory", "other"] },
+          },
+          _size: { $ifNull: ["$fileDoc.size", 0] },
+        },
+      },
+      {
+        $group: {
+          _id: "$_category",
+          totalCount: { $sum: 1 },
+          newCount: {
+            $sum: { $cond: [{ $eq: ["$status", "new"] }, 1, 0] },
+          },
+          dupCount: {
+            $sum: { $cond: [{ $eq: ["$status", "duplicate"] }, 1, 0] },
+          },
+          totalSize: { $sum: "$_size" },
+          newSize: {
+            $sum: { $cond: [{ $eq: ["$status", "new"] }, "$_size", 0] },
+          },
+          dupSize: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "duplicate"] }, "$_size", 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          category: { $ifNull: ["$_id", "other"] },
+          totalCount: 1,
+          newCount: 1,
+          dupCount: 1,
+          totalSize: 1,
+          newSize: 1,
+          dupSize: 1,
+        },
+      },
+      { $sort: { totalCount: -1, category: 1 } },
+      ...(typeof options.limit === "number"
+        ? ([{ $limit: options.limit }] as PipelineStage[])
+        : []),
+    ];
+
+    return DownloadEvent.aggregate<CategoryStatsRow>(pipeline).exec();
+  },
+
+  async aggregateDomainsByPeriod(
+    userId: string,
+    options: StatsPeriodOptions,
+  ): Promise<DomainStatsRow[]> {
+    const match: Record<string, unknown> = {
+      userId: new Types.ObjectId(userId),
+    };
+    const createdAt = buildDateRangeMatch(options);
+    if (createdAt) {
+      match.createdAt = createdAt;
+    }
+
+    const pipeline: PipelineStage[] = [
+      { $match: match },
+      {
+        $lookup: {
+          from: "files",
+          localField: "fileId",
+          foreignField: "_id",
+          as: "fileDoc",
+        },
+      },
+      {
+        $unwind: {
+          path: "$fileDoc",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          _domain: {
+            $toLower: {
+              $ifNull: [
+                {
+                  $cond: [
+                    {
+                      $or: [
+                        { $eq: ["$sourceDomain", null] },
+                        { $eq: ["$sourceDomain", ""] },
+                      ],
+                    },
+                    "unknown",
+                    "$sourceDomain",
+                  ],
+                },
+                "unknown",
+              ],
+            },
+          },
+          _size: { $ifNull: ["$fileDoc.size", 0] },
+        },
+      },
+      {
+        $group: {
+          _id: "$_domain",
+          totalCount: { $sum: 1 },
+          newCount: {
+            $sum: { $cond: [{ $eq: ["$status", "new"] }, 1, 0] },
+          },
+          dupCount: {
+            $sum: { $cond: [{ $eq: ["$status", "duplicate"] }, 1, 0] },
+          },
+          totalSize: { $sum: "$_size" },
+          newSize: {
+            $sum: { $cond: [{ $eq: ["$status", "new"] }, "$_size", 0] },
+          },
+          dupSize: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "duplicate"] }, "$_size", 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          domain: { $ifNull: ["$_id", "unknown"] },
+          totalCount: 1,
+          newCount: 1,
+          dupCount: 1,
+          totalSize: 1,
+          newSize: 1,
+          dupSize: 1,
+        },
+      },
+      { $sort: { totalCount: -1, domain: 1 } },
+      ...(typeof options.limit === "number"
+        ? ([{ $limit: options.limit }] as PipelineStage[])
+        : []),
+    ];
+
+    return DownloadEvent.aggregate<DomainStatsRow>(pipeline).exec();
   },
 
   async findLatestSavedPathByFileId(

@@ -41,7 +41,7 @@ export const BrowsingDomainStatsRepository = {
     userId: string,
     from: string | null,
     to: string | null,
-    limit: number,
+    limit?: number,
     endDateLabel: string,
   ): Promise<{
     rows: IBrowsingDomainStats[];
@@ -79,7 +79,7 @@ export const BrowsingDomainStatsRepository = {
               },
             },
             { $sort: { totalActiveTime: -1 } },
-            { $limit: limit },
+            ...(typeof limit === "number" ? ([{ $limit: limit }] as PipelineStage[]) : []),
           ],
         },
       },
