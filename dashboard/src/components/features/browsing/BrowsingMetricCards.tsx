@@ -21,24 +21,29 @@ function formatSessionTimeRange(
 }
 
 interface BrowsingMetricCardsProps {
+  hideSectionHeader?: boolean;
   onOpenDrawer?: (trigger: BrowsingDrawerTrigger) => void;
 }
 
-export function BrowsingMetricCards({ onOpenDrawer }: BrowsingMetricCardsProps) {
+export function BrowsingMetricCards({
+  hideSectionHeader = false,
+  onOpenDrawer,
+}: BrowsingMetricCardsProps) {
   const { data: metrics, isLoading, isError, refetch } = useBrowsingStats();
 
   if (isError) {
     return (
-      <section className="mb-12">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900">
-            Overview Cards
-          </h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Snapshot of time online, sites visited, focus, and top site for
-            today.
-          </p>
-        </div>
+      <section className={hideSectionHeader ? "" : "mb-12"}>
+        {!hideSectionHeader ? (
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+              Overview Cards
+            </h3>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+              Cards summarize today: total active time, distinct sites, focus score, and your longest session with its time range.
+            </p>
+          </div>
+        ) : null}
         <div
           className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6"
           style={{ boxShadow: "var(--shadow-glass)" }}
@@ -118,13 +123,17 @@ export function BrowsingMetricCards({ onOpenDrawer }: BrowsingMetricCardsProps) 
   const longestSessionSubLine = isLongestSessionEmpty ? undefined : rangeLine;
 
   return (
-    <section className="mb-12">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Overview Cards</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Snapshot of time online, sites visited, focus, and top site for today.
-        </p>
-      </div>
+    <section className={hideSectionHeader ? "" : "mb-12"}>
+      {!hideSectionHeader ? (
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+            Overview Cards
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Cards summarize today: total active time, distinct sites, focus score, and your longest session with its time range.
+          </p>
+        </div>
+      ) : null}
       <div className="grid grid-cols-5 gap-4">
         <MetricCard
           label="TIME ONLINE"
