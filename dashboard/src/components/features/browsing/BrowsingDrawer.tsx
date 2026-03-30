@@ -3,6 +3,7 @@ import {
   useBrowsingDomainStats,
   useBrowsingStats,
 } from "@/api/useBrowsing";
+import { formatDurationSeconds } from "@/utils/formatDuration";
 import { useBrowsingDrawerSessions } from "@/api/useBrowsingDrawer";
 import type {
   BrowsingDrawerSessionsParams,
@@ -25,6 +26,12 @@ const STUB_SESSION_QUERY: BrowsingDrawerSessionsParams = {
   page: 1,
   limit: LIMIT,
   sort: "newest",
+};
+
+const PRODUCTIVITY_LABELS: Record<string, string> = {
+  productive: "Productive",
+  distracting: "Distracting",
+  neutral: "Neutral",
 };
 
 const EMPTY: Record<string, { primary: string; secondary?: string }> = {
@@ -63,6 +70,9 @@ const EMPTY: Record<string, { primary: string; secondary?: string }> = {
   "timeline-block": {
     primary: "No sessions in this time window.",
   },
+  "productivity-segment": {
+    primary: "No sessions for this category today.",
+  },
 };
 
 /** Fixed per-drawer sort (no client-side sort UI). */
@@ -78,6 +88,8 @@ function fixedSortForTrigger(
       return "longest";
     case "timeline-block":
       return "newest";
+    case "productivity-segment":
+      return "longest";
     default:
       return "newest";
   }
@@ -142,6 +154,13 @@ function buildSessionQuery(
         to: trigger.endIso,
         sort: "newest",
       };
+    case "productivity-segment":
+      return {
+        ...base,
+        period: "today",
+        productivityType: trigger.productivityType,
+        sort: apiSort,
+      };
     default:
       return null;
   }
@@ -173,6 +192,8 @@ function drawerTitle(trigger: BrowsingDrawerTrigger): string {
       return `${trigger.categoryName} Sessions`;
     case "timeline-block":
       return `${trigger.timeLabel} Sessions`;
+    case "productivity-segment":
+      return `${PRODUCTIVITY_LABELS[trigger.productivityType] ?? trigger.productivityType} Sessions`;
     default:
       return "Sessions";
   }
@@ -242,20 +263,21 @@ export function BrowsingDrawer({
 
   const sessionQuery = useMemo(() => {
     if (!trigger) return null;
-    if (
-      trigger.type === "feed-session" ||
-      trigger.type === "sites-visited"
-    ) {
+    if (trigger.type === "feed-session" || trigger.type === "sites-visited") {
       return null;
     }
     return buildSessionQuery(trigger, page, apiSort);
   }, [trigger, page, apiSort]);
 
-  const { data: sessionPage, isLoading, isError, refetch } =
-    useBrowsingDrawerSessions(
-      sessionQuery ?? STUB_SESSION_QUERY,
-      Boolean(sessionQuery) && sessionListEnabled && isOpen,
-    );
+  const {
+    data: sessionPage,
+    isLoading,
+    isError,
+    refetch,
+  } = useBrowsingDrawerSessions(
+    sessionQuery ?? STUB_SESSION_QUERY,
+    Boolean(sessionQuery) && sessionListEnabled && isOpen,
+  );
 
   const { data: domainPayload, isLoading: domainsLoading } =
     useBrowsingDomainStats(
@@ -370,9 +392,26 @@ export function BrowsingDrawer({
   const showFocusHeader =
     trigger.type === "focus-score" && metrics?.today != null;
 
+  const productivityAccessory =
+    trigger.type === "productivity-segment" ? (
+      <p className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+        <span
+          className={[
+            "inline-block h-2 w-2 rounded-full",
+            trigger.productivityType === "productive"
+              ? "bg-[var(--color-success)]"
+              : trigger.productivityType === "distracting"
+                ? "bg-[var(--color-coral)]"
+                : "bg-[var(--color-text-ghost)]",
+          ].join(" ")}
+        />
+        <span>{formatDurationSeconds(trigger.seconds)} today</span>
+      </p>
+    ) : null;
+
   const timelineAccessory =
     trigger.type === "timeline-block" ? (
-      <p className="flex items-center gap-2 text-xs text-[#64748B]">
+      <p className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
         <span>
           {(sessionPage?.total ?? 0) === 1
             ? "1 session"
@@ -380,13 +419,14 @@ export function BrowsingDrawer({
         </span>
         <span aria-hidden>·</span>
         <span
-          className={`inline-block h-2 w-2 rounded-full ${
+          className={[
+            "inline-block h-2 w-2 rounded-full",
             trigger.productivity === "productive"
-              ? "bg-[#16A34A]"
+              ? "bg-[var(--color-success)]"
               : trigger.productivity === "distractive"
-                ? "bg-[#DC2626]"
-                : "bg-[#94A3B8]"
-          }`}
+                ? "bg-[var(--color-danger)]"
+                : "bg-[var(--color-text-ghost)]",
+          ].join(" ")}
         />
         <span className="capitalize">{trigger.productivity}</span>
       </p>
@@ -400,21 +440,19 @@ export function BrowsingDrawer({
         : undefined;
 
   const paginationFooter =
-    sessionPage &&
-    sessionPage.totalPages > 1 &&
-    !debouncedSearch.trim() ? (
-      <footer className="sticky bottom-0 border-t border-[var(--color-border)] bg-white px-6 py-3">
-        <div className="flex items-center justify-center gap-3">
+    sessionPage && sessionPage.totalPages > 1 && !debouncedSearch.trim() ? (
+      <footer className="sticky bottom-0 border-t border-[var(--color-border)]/80 bg-[#faf8ff]/95 px-5 py-3 backdrop-blur-md sm:px-6">
+        <div className="flex items-center justify-center gap-4">
           <button
             type="button"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             aria-label="Previous page"
-            className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full border border-[var(--color-border)] bg-white/80 p-2 text-[var(--color-primary)] shadow-sm transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ChevronLeft size={16} />
           </button>
-          <p className="text-sm text-[var(--color-text-secondary)]">
+          <p className="min-w-[7rem] text-center text-xs font-semibold tabular-nums text-[var(--color-text-secondary)]">
             Page {page} of {sessionPage.totalPages}
           </p>
           <button
@@ -428,7 +466,7 @@ export function BrowsingDrawer({
               )
             }
             aria-label="Next page"
-            className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full border border-[var(--color-border)] bg-white/80 p-2 text-[var(--color-primary)] shadow-sm transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ChevronRight size={16} />
           </button>
@@ -483,16 +521,18 @@ export function BrowsingDrawer({
               return (
                 <div
                   key={`${listAnimSeed}-${row._id}`}
-                  className="anim-list-item-enter ui-hover-row mb-3 w-full rounded-xl border border-[var(--color-border)] bg-white text-left transition-colors duration-150 hover:bg-[var(--color-bg-hover)]"
+                  className="anim-list-item-enter ui-hover-row mb-2.5 w-full text-left transition-all duration-150 last:mb-0"
                   style={{ animationDelay: `${Math.min(index, 9) * 30}ms` }}
                 >
-                  <div className="px-6 py-3">
-                    <BrowsingDomainRow
-                      row={row}
-                      categoryIcon={meta?.icon}
-                      categoryColor={meta?.color}
-                      noPadding
-                    />
+                  <div className="chart-glass rounded-xl !p-0 transition-shadow duration-200 hover:shadow-[0_10px_28px_rgba(8,145,178,0.1)]">
+                    <div className="px-4 py-3 sm:py-3.5">
+                      <BrowsingDomainRow
+                        row={row}
+                        categoryIcon={meta?.icon}
+                        categoryColor={meta?.color}
+                        noPadding
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -512,7 +552,7 @@ export function BrowsingDrawer({
       <DrawerListLayout
         title={drawerTitle(trigger)}
         subtitle={sessionSubtitle}
-        titleAccessory={timelineAccessory}
+        titleAccessory={productivityAccessory ?? timelineAccessory}
         onClose={onClose}
         searchInput={search}
         onSearchInputChange={setSearch}
@@ -578,20 +618,20 @@ export function BrowsingDrawer({
             return (
               <div
                 key={`${listAnimSeed}-${s._id}`}
-                className="anim-list-item-enter ui-hover-row mb-3 w-full rounded-xl border border-[var(--color-border)] bg-white text-left transition-colors duration-150 hover:bg-[var(--color-bg-hover)]"
+                className="anim-list-item-enter ui-hover-row mb-2.5 w-full text-left transition-all duration-150 last:mb-0"
                 style={{ animationDelay: `${Math.min(index, 9) * 30}ms` }}
               >
-                <div className="px-6 py-3">
-                  <BrowsingSessionRow
-                    session={s}
-                    categoryIcon={meta?.icon}
-                    categoryColor={meta?.color}
-                    timeZone={timeZone}
-                      onClick={() =>
-                        setSelectedSessionFromList(s)
-                      }
-                    noPadding
-                  />
+                <div className="chart-glass rounded-xl !p-0 transition-shadow duration-200 hover:shadow-[0_10px_28px_rgba(8,145,178,0.1)]">
+                  <div className="px-4 py-3 sm:py-3.5">
+                    <BrowsingSessionRow
+                      session={s}
+                      categoryIcon={meta?.icon}
+                      categoryColor={meta?.color}
+                      timeZone={timeZone}
+                      onClick={() => setSelectedSessionFromList(s)}
+                      noPadding
+                    />
+                  </div>
                 </div>
               </div>
             );

@@ -11,26 +11,31 @@ export type BrowsingDrawerTrigger =
   | { type: "chart-bar"; date: string; formattedDate: string }
   | { type: "feed-session"; session: BrowsingSessionRow }
   | {
-    type: "site-breakdown";
-    domain: string;
-    label: string;
-    period: BrowsingStatsPeriod;
-  }
+      type: "site-breakdown";
+      domain: string;
+      label: string;
+      period: BrowsingStatsPeriod;
+    }
   | {
-    type: "site-breakdown-others";
-    excludedDomains: string[];
-    period: BrowsingStatsPeriod;
-  }
+      type: "site-breakdown-others";
+      excludedDomains: string[];
+      period: BrowsingStatsPeriod;
+    }
   | {
-    type: "category-breakdown";
-    categorySlug: string;
-    categoryName: string;
-    period: BrowsingStatsPeriod;
-  }
+      type: "category-breakdown";
+      categorySlug: string;
+      categoryName: string;
+      period: BrowsingStatsPeriod;
+    }
   | {
-    type: "timeline-block";
-    startIso: string;
-    endIso: string;
-    timeLabel: string;
-    productivity: string;
-  };
+      type: "timeline-block";
+      startIso: string;
+      endIso: string;
+      timeLabel: string;
+      productivity: string;
+    }
+  | {
+      type: "productivity-segment";
+      productivityType: "productive" | "distracting" | "neutral";
+      seconds: number;
+    };
