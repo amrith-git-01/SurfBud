@@ -7,6 +7,7 @@ import type {
   MetricsDeltaPayload,
   RemoveFilePayload,
   TabGroupsUpdatedPayload,
+  BrowsingSessionsSyncedPayload,
 } from "../types/shared/websocket.types";
 
 interface SseClient {
@@ -94,6 +95,10 @@ class SseManager {
 
   emitTabGroupsUpdated(userId: string, data: TabGroupsUpdatedPayload): void {
     this.broadcastToUser(userId, "productivity:tab-groups:updated", data);
+  }
+
+  emitBrowsingSynced(userId: string, data: BrowsingSessionsSyncedPayload): void {
+    this.broadcastToUser(userId, "dashboard:browsing:synced", data);
   }
 }
 
