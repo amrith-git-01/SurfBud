@@ -1,16 +1,12 @@
 import { useMemo, useState } from "react";
 import { useBrowsingDailyTimeline } from "@/api/useBrowsing";
-import { ContextSwitchStats } from "./ContextSwitchStats";
 import type { BrowsingTimelineBlock } from "@/api/browsing.api";
 import { formatDurationSeconds } from "@/utils/formatDuration";
 import type { BrowsingDrawerTrigger } from "./browsingDrawer.types";
 import { SkeletonBlock } from "@/components/skeletons/SkeletonBlock";
 
 /** Spec §9.1 — productive / distractive / neutral / empty */
-const BLOCK_BG: Record<
-  BrowsingTimelineBlock["productivity"],
-  string
-> = {
+const BLOCK_BG: Record<BrowsingTimelineBlock["productivity"], string> = {
   productive: "rgba(22, 163, 74, 0.6)",
   distractive: "rgba(220, 38, 38, 0.6)",
   neutral: "rgba(148, 163, 184, 0.4)",
@@ -59,23 +55,23 @@ function formatSlotRange(
   return `${a.toLocaleTimeString(undefined, opts)} – ${b.toLocaleTimeString(undefined, opts)}`;
 }
 
-function productivityTitle(
-  p: BrowsingTimelineBlock["productivity"],
-): string {
+function productivityTitle(p: BrowsingTimelineBlock["productivity"]): string {
   if (p === "empty") return "No activity";
   return p.charAt(0).toUpperCase() + p.slice(1);
 }
 
 interface DailyTimelineProps {
+  hideSectionHeader?: boolean;
   onOpenDrawer?: (trigger: BrowsingDrawerTrigger) => void;
 }
 
-export function DailyTimeline({ onOpenDrawer }: DailyTimelineProps) {
+export function DailyTimeline({
+  hideSectionHeader = false,
+  onOpenDrawer,
+}: DailyTimelineProps) {
   const { data, isLoading, isError, refetch } = useBrowsingDailyTimeline({});
   const [hovered, setHovered] = useState<BrowsingTimelineBlock | null>(null);
-  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
 
   const blocks = data?.blocks ?? [];
   const timezone = data?.timezone ?? "UTC";
@@ -104,15 +100,18 @@ export function DailyTimeline({ onOpenDrawer }: DailyTimelineProps) {
 
   if (isLoading) {
     return (
-      <section className="mb-12">
-        <div className="mb-4 px-2">
-          <h3 className="text-sm font-semibold text-gray-900">
-            Today&apos;s browsing pattern
-          </h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Active time by 30-minute blocks (local day).
-          </p>
-        </div>
+      <section className={hideSectionHeader ? "" : "mb-12"}>
+        {!hideSectionHeader ? (
+          <div className="mb-4 px-2">
+            <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+              Today&apos;s browsing pattern
+            </h3>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+              Each column is 30 minutes of your local day; darker blocks mean
+              more active time in that slot.
+            </p>
+          </div>
+        ) : null}
         <div className="chart-glass w-full p-6">
           <div
             className="mb-0 grid h-10 w-full gap-px"
@@ -137,9 +136,6 @@ export function DailyTimeline({ onOpenDrawer }: DailyTimelineProps) {
               </div>
             ))}
           </div>
-          <div className="mt-8 border-t border-[var(--color-border)] pt-8">
-            <ContextSwitchStats />
-          </div>
         </div>
       </section>
     );
@@ -147,12 +143,14 @@ export function DailyTimeline({ onOpenDrawer }: DailyTimelineProps) {
 
   if (isError) {
     return (
-      <section className="mb-12">
-        <div className="mb-4 px-2">
-          <h3 className="text-sm font-semibold text-gray-900">
-            Today&apos;s browsing pattern
-          </h3>
-        </div>
+      <section className={hideSectionHeader ? "" : "mb-12"}>
+        {!hideSectionHeader ? (
+          <div className="mb-4 px-2">
+            <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+              Today&apos;s browsing pattern
+            </h3>
+          </div>
+        ) : null}
         <div className="chart-glass w-full px-4 py-6 text-center">
           <p className="text-sm text-[var(--color-danger)]">
             Could not load daily timeline
@@ -174,15 +172,18 @@ export function DailyTimeline({ onOpenDrawer }: DailyTimelineProps) {
   };
 
   return (
-    <section className="mb-12">
-      <div className="mb-4 px-2">
-        <h3 className="text-sm font-semibold text-gray-900">
-          Today&apos;s browsing pattern
-        </h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          30-minute blocks colored by dominant productivity type ({timezone}).
-        </p>
-      </div>
+    <section className={hideSectionHeader ? "" : "mb-12"}>
+      {!hideSectionHeader ? (
+        <div className="mb-4 px-2">
+          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+            Today&apos;s browsing pattern
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Color shows the main productivity category for each 30-minute
+            window. Times use {timezone}.
+          </p>
+        </div>
+      ) : null}
 
       <div className="chart-glass w-full p-6">
         <div className="relative w-full">
@@ -288,17 +289,16 @@ export function DailyTimeline({ onOpenDrawer }: DailyTimelineProps) {
             Browse with SurfBud active to see your pattern.
           </p>
         ) : null}
-
-        <div className="mt-8 border-t border-[var(--color-border)] pt-8">
-          <ContextSwitchStats />
-        </div>
       </div>
 
       {hovered && pointer ? (
         <div
           className="pointer-events-none fixed z-[120] max-w-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-left text-xs shadow-lg"
           style={{
-            left: Math.min(pointer.x + 12, typeof window !== "undefined" ? window.innerWidth - 280 : 0),
+            left: Math.min(
+              pointer.x + 12,
+              typeof window !== "undefined" ? window.innerWidth - 280 : 0,
+            ),
             top: pointer.y + 12,
           }}
         >
