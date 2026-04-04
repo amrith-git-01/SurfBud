@@ -13,22 +13,30 @@ import { formatBytes } from "../../../utils/formatBytes";
 
 interface DuplicateGroupsProps {
   onOpenTimeline?: (payload: { fileId: string; filename: string }) => void;
+  hideSectionHeader?: boolean;
 }
 
-export function DuplicateGroups({ onOpenTimeline }: DuplicateGroupsProps) {
+export function DuplicateGroups({
+  onOpenTimeline,
+  hideSectionHeader = false,
+}: DuplicateGroupsProps) {
   const { data: groups, isLoading, isError, refetch } = useDuplicateGroups();
 
-  if (isLoading) return <DuplicateGroupsSkeleton />;
+  if (isLoading) {
+    return <DuplicateGroupsSkeleton hideSectionHeader={hideSectionHeader} />;
+  }
 
   if (isError) {
     return (
-      <section className="mb-12">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900">Duplicate Groups</h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Group repeated files and open each group to inspect duplicate history.
-          </p>
-        </div>
+      <section className={hideSectionHeader ? "" : "mb-12"}>
+        {!hideSectionHeader ? (
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">Duplicate groups</h3>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+              Each row is a file that was downloaded more than once; open it to see the full duplicate timeline.
+            </p>
+          </div>
+        ) : null}
         <div className="chart-glass w-full">
           <div className="px-4 py-6 text-center">
             <p className="text-sm text-[var(--color-danger)]">
@@ -50,13 +58,15 @@ export function DuplicateGroups({ onOpenTimeline }: DuplicateGroupsProps) {
   const rows = groups ?? [];
 
   return (
-    <section className="mb-12">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Duplicate Groups</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Group repeated files and open each group to inspect duplicate history.
-        </p>
-      </div>
+    <section className={hideSectionHeader ? "" : "mb-12"}>
+      {!hideSectionHeader ? (
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">Duplicate groups</h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Each row is a file that was downloaded more than once; open it to see the full duplicate timeline.
+          </p>
+        </div>
+      ) : null}
       <div className="chart-glass w-full p-0 max-h-[420px] flex flex-col overflow-hidden">
         {rows.length === 0 ? (
           <div className="px-4 py-8 text-center">
@@ -64,11 +74,11 @@ export function DuplicateGroups({ onOpenTimeline }: DuplicateGroupsProps) {
               No duplicates found
             </p>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              Great job keeping your downloads clean!
+              SurfBud did not find any duplicate filenames in your tracked downloads.
             </p>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
             {rows.map((group) => {
               const totalDownloads = group.dupCount + 1;
               const hasFileId = Boolean(group.fileId);
@@ -193,15 +203,21 @@ function getCategoryColor(category: string): string {
   }
 }
 
-function DuplicateGroupsSkeleton() {
+function DuplicateGroupsSkeleton({
+  hideSectionHeader = false,
+}: {
+  hideSectionHeader?: boolean;
+}) {
   return (
-    <section className="mb-12">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Duplicate Groups</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Group repeated files and open each group to inspect duplicate history.
-        </p>
-      </div>
+    <section className={hideSectionHeader ? "" : "mb-12"}>
+      {!hideSectionHeader ? (
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">Duplicate groups</h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Each row is a file that was downloaded more than once; open it to see the full duplicate timeline.
+          </p>
+        </div>
+      ) : null}
       <div className="chart-glass w-full p-0 max-h-[420px] flex flex-col overflow-hidden">
         {Array.from({ length: 6 }).map((_, i) => (
           <div
