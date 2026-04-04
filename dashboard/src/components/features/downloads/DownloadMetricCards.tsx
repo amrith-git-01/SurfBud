@@ -11,20 +11,26 @@ import { formatBytes } from "../../../utils/formatBytes";
 
 interface DownloadMetricCardsProps {
   onCardClick?: (card: "today" | "week" | "month" | "total" | "wasted") => void;
+  hideSectionHeader?: boolean;
 }
 
-export function DownloadMetricCards({ onCardClick }: DownloadMetricCardsProps) {
+export function DownloadMetricCards({
+  onCardClick,
+  hideSectionHeader = false,
+}: DownloadMetricCardsProps) {
   const { data: metrics, isLoading, isError, refetch } = useDownloadStats();
 
   if (isError) {
     return (
-      <section className="mb-12">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900">Overview Cards</h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Snapshot of download volume, duplicate count, and storage impact.
-          </p>
-        </div>
+      <section className={hideSectionHeader ? "" : "mb-12"}>
+        {!hideSectionHeader ? (
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">Overview</h3>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+              Rolling counts for today, week, and month, plus how many files are new versus duplicate and duplicate size.
+            </p>
+          </div>
+        ) : null}
         <div
           className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6"
           style={{ boxShadow: "var(--shadow-glass)" }}
@@ -57,14 +63,16 @@ export function DownloadMetricCards({ onCardClick }: DownloadMetricCardsProps) {
   };
 
   return (
-    <section className="mb-12">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Overview Cards</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Snapshot of download volume, duplicate count, and storage impact.
-        </p>
-      </div>
-      <div className="grid grid-cols-5 gap-4">
+    <section className={hideSectionHeader ? "" : "mb-12"}>
+      {!hideSectionHeader ? (
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">Overview</h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Rolling counts for today, week, and month, plus how many files are new versus duplicate and duplicate size.
+          </p>
+        </div>
+      ) : null}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5 xl:gap-4">
         <MetricCard
           label="TODAY'S DOWNLOADS"
           icon={<Download size={18} strokeWidth={2} />}

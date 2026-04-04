@@ -1,4 +1,8 @@
 import { useDownloadStats } from "../../../api/useDownloads";
+import {
+  HealthBarCard,
+  HealthBarCardSkeleton,
+} from "@/components/ui/HealthBarCard";
 
 export type HealthBarsClickTarget =
   | "total-files"
@@ -10,246 +14,141 @@ export type HealthBarsClickTarget =
 
 interface DownloadHealthBarsProps {
   onFilterClick?: (target: HealthBarsClickTarget) => void;
+  hideSectionHeader?: boolean;
 }
 
-export function DownloadHealthBars({ onFilterClick }: DownloadHealthBarsProps) {
+export function DownloadHealthBars({
+  onFilterClick,
+  hideSectionHeader = false,
+}: DownloadHealthBarsProps) {
   const { data: stats, isLoading } = useDownloadStats();
 
   if (isLoading) {
-    return <DownloadHealthBarsSkeleton />;
+    return (
+      <section>
+        {!hideSectionHeader && <SectionHeader />}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <HealthBarCardSkeleton pillCount={3} />
+          <HealthBarCardSkeleton pillCount={3} />
+        </div>
+      </section>
+    );
   }
 
-  const totalFiles = (stats?.totalNew || 0) + (stats?.totalDuplicates || 0);
-  const newPercentage = totalFiles > 0 ? ((stats?.totalNew || 0) / totalFiles) * 100 : 0;
-  const dupPercentage = totalFiles > 0 ? ((stats?.totalDuplicates || 0) / totalFiles) * 100 : 0;
+  const totalFiles = (stats?.totalNew ?? 0) + (stats?.totalDuplicates ?? 0);
+  const newPct =
+    totalFiles > 0 ? ((stats?.totalNew ?? 0) / totalFiles) * 100 : 0;
+  const dupPct =
+    totalFiles > 0 ? ((stats?.totalDuplicates ?? 0) / totalFiles) * 100 : 0;
 
-  // All fields come directly from backend - no calculations
-  const totalSize = stats?.totalSize || 0;
-  const usedSize = stats?.newSize || 0;
-  const wastedSize = stats?.duplicateSize || 0;
-  const usedPercentage = totalSize > 0 ? (usedSize / totalSize) * 100 : 0;
-  const wastedPercentage = totalSize > 0 ? (wastedSize / totalSize) * 100 : 0;
+  const totalSize = stats?.totalSize ?? 0;
+  const usedSize = stats?.newSize ?? 0;
+  const wastedSize = stats?.duplicateSize ?? 0;
+  const usedPct = totalSize > 0 ? (usedSize / totalSize) * 100 : 0;
+  const wastedPct = totalSize > 0 ? (wastedSize / totalSize) * 100 : 0;
 
   return (
     <section>
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Download Health Bars</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Compare healthy vs duplicate patterns across count and storage usage.
-        </p>
-      </div>
+      {!hideSectionHeader && <SectionHeader />}
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Downloads Health */}
-        <div className="card-metric-glass">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="section-label">DOWNLOADS HEALTH</h3>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                New vs duplicate distribution
-              </p>
-            </div>
-            {/* Legend */}
-            <div className="flex gap-4">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-[var(--color-success)]"></div>
-                <span className="text-xs text-[var(--color-text-secondary)]">
-                  New {newPercentage.toFixed(1)}%
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-[var(--color-coral)]"></div>
-                <span className="text-xs text-[var(--color-text-secondary)]">
-                  Dup {dupPercentage.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <HealthBarCard
+          title="DOWNLOADS HEALTH"
+          description="Share of files that are new versus duplicate copies"
+          segments={[
+            {
+              label: "New",
+              pct: newPct,
+              barColor: "var(--color-success)",
+              dotClass: "bg-[var(--color-success)]",
+              onClick: () => onFilterClick?.("new-files"),
+            },
+            {
+              label: "Dup",
+              pct: dupPct,
+              barColor: "var(--color-coral)",
+              dotClass: "bg-[var(--color-coral)]",
+              onClick: () => onFilterClick?.("duplicate-files"),
+            },
+          ]}
+          pills={[
+            {
+              label: "Total",
+              value: String(totalFiles),
+              bgColor: "#0891B2",
+              onClick: () => onFilterClick?.("total-files"),
+            },
+            {
+              label: "New",
+              value: String(stats?.totalNew ?? 0),
+              bgColor: "#16A34A",
+              onClick: () => onFilterClick?.("new-files"),
+            },
+            {
+              label: "Dup",
+              value: String(stats?.totalDuplicates ?? 0),
+              bgColor: "#EA580C",
+              onClick: () => onFilterClick?.("duplicate-files"),
+            },
+          ]}
+        />
 
-          {/* Bar */}
-          <div className="w-full h-3 rounded-full overflow-hidden bg-[var(--color-bg-page)] flex mb-3">
-            <div
-              className="h-full bg-[var(--color-success)] transition-all duration-[800ms] cursor-pointer"
-              style={{
-                width: `${newPercentage}%`,
-                transitionTimingFunction: "cubic-bezier(0.0, 0.0, 0.2, 1)",
-              }}
-              onClick={() => onFilterClick?.("new-files")}
-            ></div>
-            <div
-              className="h-full bg-[var(--color-coral)] transition-all duration-[800ms] cursor-pointer"
-              style={{
-                width: `${dupPercentage}%`,
-                transitionTimingFunction: "cubic-bezier(0.0, 0.0, 0.2, 1)",
-              }}
-              onClick={() => onFilterClick?.("duplicate-files")}
-            ></div>
-          </div>
-
-          {/* Stat Pills - Right aligned */}
-          <div className="flex gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => onFilterClick?.("total-files")}
-              className="bg-[#0891B2] rounded-lg px-3 py-1 cursor-pointer"
-            >
-              <div className="text-xs text-white/80">Total</div>
-              <div className="text-xs font-medium text-white tabular-nums">
-                {totalFiles}
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => onFilterClick?.("new-files")}
-              className="bg-[#16A34A] rounded-lg px-3 py-1 cursor-pointer"
-            >
-              <div className="text-xs text-white/80">New</div>
-              <div className="text-xs font-medium text-white tabular-nums">
-                {stats?.totalNew || 0}
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => onFilterClick?.("duplicate-files")}
-              className="bg-[#EA580C] rounded-lg px-3 py-1 cursor-pointer"
-            >
-              <div className="text-xs text-white/80">Dup</div>
-              <div className="text-xs font-medium text-white tabular-nums">
-                {stats?.totalDuplicates || 0}
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* Storage Efficiency */}
-        <div className="card-metric-glass">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="section-label">STORAGE EFFICIENCY</h3>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                Useful vs wasted storage
-              </p>
-            </div>
-            {/* Legend */}
-            <div className="flex gap-4">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-[var(--color-success)]"></div>
-                <span className="text-xs text-[var(--color-text-secondary)]">
-                  Used {usedPercentage.toFixed(1)}%
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-[var(--color-coral)]"></div>
-                <span className="text-xs text-[var(--color-text-secondary)]">
-                  Wasted {wastedPercentage.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Bar */}
-          <div className="w-full h-3 rounded-full overflow-hidden bg-[var(--color-bg-page)] flex mb-3">
-            <div
-              className="h-full bg-[var(--color-success)] transition-all duration-[800ms] cursor-pointer"
-              style={{
-                width: `${usedPercentage}%`,
-                transitionTimingFunction: "cubic-bezier(0.0, 0.0, 0.2, 1)",
-              }}
-              onClick={() => onFilterClick?.("used-size")}
-            ></div>
-            <div
-              className="h-full bg-[var(--color-coral)] transition-all duration-[800ms] cursor-pointer"
-              style={{
-                width: `${wastedPercentage}%`,
-                transitionTimingFunction: "cubic-bezier(0.0, 0.0, 0.2, 1)",
-              }}
-              onClick={() => onFilterClick?.("wasted-size")}
-            ></div>
-          </div>
-
-          {/* Stat Pills - Right aligned */}
-          <div className="flex gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => onFilterClick?.("total-size")}
-              className="bg-[#0891B2] rounded-lg px-3 py-1 cursor-pointer"
-            >
-              <div className="text-xs text-white/80">Total</div>
-              <div className="text-xs font-medium text-white tabular-nums">
-                {formatBytes(totalSize)}
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => onFilterClick?.("used-size")}
-              className="bg-[#16A34A] rounded-lg px-3 py-1 cursor-pointer"
-            >
-              <div className="text-xs text-white/80">Used</div>
-              <div className="text-xs font-medium text-white tabular-nums">
-                {formatBytes(usedSize)}
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => onFilterClick?.("wasted-size")}
-              className="bg-[#EA580C] rounded-lg px-3 py-1 cursor-pointer"
-            >
-              <div className="text-xs text-white/80">Wasted</div>
-              <div className="text-xs font-medium text-white tabular-nums">
-                {formatBytes(wastedSize)}
-              </div>
-            </button>
-          </div>
-        </div>
+        <HealthBarCard
+          title="STORAGE EFFICIENCY"
+          description="How much of your download folder is unique content versus wasted duplicate space"
+          segments={[
+            {
+              label: "Used",
+              pct: usedPct,
+              barColor: "var(--color-success)",
+              dotClass: "bg-[var(--color-success)]",
+              onClick: () => onFilterClick?.("used-size"),
+            },
+            {
+              label: "Wasted",
+              pct: wastedPct,
+              barColor: "var(--color-coral)",
+              dotClass: "bg-[var(--color-coral)]",
+              onClick: () => onFilterClick?.("wasted-size"),
+            },
+          ]}
+          pills={[
+            {
+              label: "Total",
+              value: formatBytes(totalSize),
+              bgColor: "#0891B2",
+              onClick: () => onFilterClick?.("total-size"),
+            },
+            {
+              label: "Used",
+              value: formatBytes(usedSize),
+              bgColor: "#16A34A",
+              onClick: () => onFilterClick?.("used-size"),
+            },
+            {
+              label: "Wasted",
+              value: formatBytes(wastedSize),
+              bgColor: "#EA580C",
+              onClick: () => onFilterClick?.("wasted-size"),
+            },
+          ]}
+        />
       </div>
     </section>
   );
 }
 
-function DownloadHealthBarsSkeleton() {
-  const CardSkeleton = () => (
-    <div className="card-metric-glass">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <div className="skeleton h-3 w-32 rounded" />
-          <div className="skeleton mt-2 h-3 w-40 rounded" />
-        </div>
-        <div className="flex gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="skeleton h-2.5 w-2.5 rounded-full" />
-            <div className="skeleton h-3 w-14 rounded" />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="skeleton h-2.5 w-2.5 rounded-full" />
-            <div className="skeleton h-3 w-14 rounded" />
-          </div>
-        </div>
-      </div>
-
-      <div className="skeleton mb-3 h-3 w-full rounded-full" />
-
-      <div className="flex justify-end gap-2">
-        <div className="skeleton h-12 w-20 rounded-lg" />
-        <div className="skeleton h-12 w-20 rounded-lg" />
-        <div className="skeleton h-12 w-20 rounded-lg" />
-      </div>
-    </div>
-  );
-
+function SectionHeader() {
   return (
-    <section>
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Download Health Bars</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Compare healthy vs duplicate patterns across count and storage usage.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <CardSkeleton />
-        <CardSkeleton />
-      </div>
-    </section>
+    <div className="mb-4">
+      <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+        Library health
+      </h3>
+      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+        Compares unique downloads against duplicates for both file counts and
+        total storage used.
+      </p>
+    </div>
   );
 }
 
@@ -259,6 +158,6 @@ function formatBytes(bytes: number): string {
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const clampedIndex = Math.max(0, Math.min(i, sizes.length - 1));
-  return `${(bytes / Math.pow(k, clampedIndex)).toFixed(clampedIndex === 0 ? 0 : 2)} ${sizes[clampedIndex]}`;
+  const idx = Math.max(0, Math.min(i, sizes.length - 1));
+  return `${(bytes / Math.pow(k, idx)).toFixed(idx === 0 ? 0 : 2)} ${sizes[idx]}`;
 }

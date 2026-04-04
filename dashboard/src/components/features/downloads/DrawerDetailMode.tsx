@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Archive,
+  ArrowLeft,
   Check,
   Code,
   Copy,
@@ -14,7 +15,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useFileById, useFileTimeline } from "../../../api/useDownloads";
-import { BackButton } from "../../ui/BackButton";
 import { StatusBadge } from "../../ui/StatusBadge";
 import {
   DrawerDetailsSkeleton,
@@ -221,54 +221,82 @@ export function DrawerDetailMode({
     }
   };
 
+  const headerTitle =
+    isFileLoading && !file
+      ? "File Details"
+      : `File Details: ${displayFilename}`;
+
   return (
-    <div className="flex h-full flex-col bg-white font-sans">
-      <header className="border-b border-[var(--color-border)] px-6 py-4">
+    <div className="flex h-full flex-col bg-[#faf8ff] font-sans">
+      <header className="border-b border-[var(--color-border)]/80 bg-[#faf8ff]/95 px-5 py-4 backdrop-blur-sm sm:px-6">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {canGoBack ? (
-              <BackButton label={listTitle} onClick={onBack} />
+              <button
+                type="button"
+                onClick={onBack}
+                aria-label={`Back to ${listTitle}`}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-transparent text-[var(--color-primary)] transition-colors hover:border-[var(--color-border)] hover:bg-white/80"
+              >
+                <ArrowLeft size={18} strokeWidth={2} />
+              </button>
             ) : null}
+            <h2
+              className="min-w-0 truncate text-base font-bold leading-tight text-[var(--color-primary)] sm:text-lg"
+              style={{ fontFamily: "var(--font-display)" }}
+              title={headerTitle}
+            >
+              {headerTitle}
+            </h2>
           </div>
 
           <button
             type="button"
             onClick={onClose}
             aria-label="Close drawer"
-            className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors duration-150 hover:bg-[var(--color-danger-light)] hover:text-[var(--color-danger)]"
+            className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border)] hover:bg-white/80 hover:text-[var(--color-text-heading)]"
           >
-            <X size={18} />
+            <X size={18} strokeWidth={2} />
           </button>
         </div>
-      </header>
 
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        <div className="mb-4 inline-flex rounded-lg border border-[var(--color-border)] p-1">
+        <div
+          className="mt-4 inline-flex w-full max-w-full rounded-full border border-[var(--color-border)]/90 bg-white/70 p-1 shadow-[0_2px_12px_rgba(8,145,178,0.06)] sm:w-auto"
+          role="tablist"
+          aria-label="File view"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={activeView === "details"}
             onClick={() => setActiveView("details")}
             className={[
-              "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              "min-h-[2.25rem] flex-1 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 sm:flex-none sm:min-w-[6.5rem]",
               activeView === "details"
-                ? "bg-[var(--color-primary)] text-white"
-                : "bg-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-body)]",
+                ? "bg-[var(--color-primary)] text-white shadow-[0_4px_14px_rgba(8,145,178,0.35)]"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)]",
             ].join(" ")}
           >
             Details
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={activeView === "timeline"}
             onClick={() => setActiveView("timeline")}
             className={[
-              "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              "min-h-[2.25rem] flex-1 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 sm:flex-none sm:min-w-[6.5rem]",
               activeView === "timeline"
-                ? "bg-[var(--color-primary)] text-white"
-                : "bg-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-body)]",
+                ? "bg-[var(--color-primary)] text-white shadow-[0_4px_14px_rgba(8,145,178,0.35)]"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-text-heading)]",
             ].join(" ")}
           >
             Timeline
           </button>
         </div>
+      </header>
+
+      <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-5 sm:px-6">
 
         {activeView === "details" ? (
           <>
@@ -303,7 +331,7 @@ export function DrawerDetailMode({
                   }}
                 >
                   <span
-                    className="flex h-[72px] w-[72px] items-center justify-center rounded-[20px]"
+                    className="flex h-[76px] w-[76px] items-center justify-center rounded-[22px] border border-white/70 shadow-[0_10px_36px_rgba(8,145,178,0.14),0_2px_8px_rgba(8,145,178,0.06)]"
                     style={{ backgroundColor: visual.tint, color: visual.color }}
                     aria-hidden
                   >
@@ -337,8 +365,8 @@ export function DrawerDetailMode({
                       {isRemoved ? "Removed" : "Preserved"}
                     </span>
                   </div>
-                  <div className="chart-glass !p-4">
-                    <div className="divide-y divide-[var(--color-border)]">
+                  <div className="card-metric-glass !rounded-2xl !p-0 !shadow-[0_8px_32px_rgba(8,145,178,0.08),0_2px_10px_rgba(8,145,178,0.04)] hover:!translate-y-0 hover:!shadow-[0_8px_32px_rgba(8,145,178,0.08),0_2px_10px_rgba(8,145,178,0.04)]">
+                    <div className="divide-y divide-[var(--color-border)]/90 px-4 py-1">
                       {detailsRows.map((row, index) => (
                         <div
                           key={row.label}
@@ -423,8 +451,10 @@ export function DrawerDetailMode({
 
         {activeView === "timeline" ? (
         <div>
-          <p className="section-label">DOWNLOAD TIMELINE</p>
-          <p className="mb-4 text-sm text-[var(--color-text-muted)]">
+          <p className="section-label mb-1 text-[var(--color-primary)]/80">
+            Download timeline
+          </p>
+          <p className="mb-5 text-sm leading-snug text-[var(--color-primary)]/45">
             Every time this file was downloaded
           </p>
 
@@ -460,8 +490,8 @@ export function DrawerDetailMode({
                     ? "bg-[var(--color-success)]"
                     : "bg-[var(--color-warning)]";
                 const cardClassName = isFirstDownload
-                  ? "rounded-xl border border-[var(--color-success-light)] bg-[color:rgba(22,163,74,0.05)] px-3 py-2.5"
-                  : "rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5";
+                  ? "rounded-2xl border border-[var(--color-success-light)] bg-[color:rgba(22,163,74,0.07)] px-3.5 py-3 shadow-[0_4px_18px_rgba(22,163,74,0.08)]"
+                  : "rounded-2xl border border-[var(--color-border)]/85 bg-white/75 px-3.5 py-3 shadow-[0_4px_16px_rgba(8,145,178,0.05)] backdrop-blur-[2px]";
 
                 return (
                   <div
@@ -524,7 +554,7 @@ export function DrawerDetailMode({
               })}
 
               {timeline!.length === 1 ? (
-                <p className="pt-2 text-center text-sm text-[var(--color-text-muted)]">
+                <p className="pt-4 text-center text-sm text-[var(--color-primary)]/50">
                   No duplicates found for this file.
                 </p>
               ) : null}
