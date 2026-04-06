@@ -9,7 +9,6 @@ const navItems = [
   { id: "downloads" as const, path: "/downloads", label: "Downloads" },
   { id: "browsing" as const, path: "/browsing", label: "Browsing" },
   { id: "productivity" as const, path: "/productivity", label: "Productivity" },
-  { id: "reports" as const, path: "/reports", label: "Reports" },
   { id: "settings" as const, path: "/settings", label: "Settings" },
 ];
 
@@ -23,9 +22,11 @@ export function Navbar({ onLogout }: NavbarProps) {
         {/* Left side — nav links */}
         <div className="flex items-center gap-1 -ml-4">
           {navItems.map((item) => {
-            const isActive = pathname === item.path
-              || (item.path === "/dashboard" && pathname === "/")
-              || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/"));
+            const isActive =
+              pathname === item.path ||
+              (item.path === "/dashboard" && pathname === "/") ||
+              (item.path !== "/dashboard" &&
+                pathname.startsWith(item.path + "/"));
             return (
               <Link
                 key={item.id}
@@ -34,9 +35,10 @@ export function Navbar({ onLogout }: NavbarProps) {
                 className={`
                   group relative px-4 py-2 font-sans text-sm font-medium
                   transition-colors duration-200 ease-out
-                  ${isActive
-                    ? "text-[#0891B2]"
-                    : "text-[#64748B] hover:text-[#0891B2]"
+                  ${
+                    isActive
+                      ? "text-[#0891B2]"
+                      : "text-[#64748B] hover:text-[#0891B2]"
                   }
                 `}
               >
@@ -47,10 +49,7 @@ export function Navbar({ onLogout }: NavbarProps) {
                     className={`
                       block h-full mx-auto bg-[#0891B2] rounded-full
                       transition-[width] duration-250 ease-out
-                      ${isActive
-                        ? "w-full"
-                        : "w-0 group-hover:w-full"
-                      }
+                      ${isActive ? "w-full" : "w-0 group-hover:w-full"}
                     `}
                   />
                 </span>

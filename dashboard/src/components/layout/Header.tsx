@@ -1,4 +1,5 @@
 import { UserRound } from "lucide-react";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 
 interface HeaderProps {
   username: string;
@@ -14,9 +15,10 @@ export function Header({ username }: HeaderProps) {
           <span className="font-display font-bold text-xl text-[#0F172A]">Bud</span>
         </div>
 
-        {/* Right side — greeting + avatar */}
-        <div className="flex items-center gap-3">
-          <span className="font-sans text-base font-medium text-[#334155]">
+        {/* Right side — notifications + greeting + avatar */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <NotificationBell />
+          <span className="hidden font-sans text-base font-medium text-[#334155] sm:inline">
             Hey, {username}
           </span>
           <div className="avatar-btn">
