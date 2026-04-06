@@ -2,6 +2,7 @@ import clsx from "clsx";
 
 type Variant = "primary" | "secondary" | "ghost";
 type Size = "sm" | "md" | "lg";
+type HoverEffect = "lift" | "flat";
 
 interface ButtonProps {
   children: React.ReactNode;
@@ -11,6 +12,7 @@ interface ButtonProps {
   size?: Size;
   isLoading?: boolean;
   disabled?: boolean;
+  hoverEffect?: HoverEffect;
   className?: string;
 }
 
@@ -28,6 +30,7 @@ export function Button({
   size = "md",
   isLoading = false,
   disabled = false,
+  hoverEffect = "lift",
   className,
 }: ButtonProps) {
   return (
@@ -39,6 +42,7 @@ export function Button({
         "relative inline-flex items-center justify-center rounded-lg cursor-pointer",
         "focus:outline-none",
         "disabled:opacity-50 disabled:cursor-not-allowed",
+        hoverEffect === "flat" && "btn-hover-flat",
         className,
       )}
     >
@@ -47,6 +51,7 @@ export function Button({
           "btn-inner",
           `btn-${variant}`,
           sizes[size],
+          "border-2 border-transparent box-border",
           isLoading && "opacity-80",
         )}
       >

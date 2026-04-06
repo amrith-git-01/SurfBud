@@ -7,11 +7,6 @@ interface DetailsSkeletonProps {
 export function DrawerDetailsSkeleton({ rowCount = 6 }: DetailsSkeletonProps) {
   return (
     <div className="space-y-5">
-      <div className="mx-auto flex w-fit items-center gap-2 rounded-lg border border-[var(--color-border)] p-1">
-        <SkeletonBlock className="h-7 w-16 rounded-md" />
-        <SkeletonBlock className="h-7 w-16 rounded-md" />
-      </div>
-
       <div className="flex flex-col items-center">
         <SkeletonBlock className="h-[72px] w-[72px] rounded-[20px]" />
         <SkeletonBlock className="mt-3 h-6 w-56 rounded" />
@@ -23,7 +18,7 @@ export function DrawerDetailsSkeleton({ rowCount = 6 }: DetailsSkeletonProps) {
           <SkeletonBlock className="h-3 w-24 rounded" />
           <SkeletonBlock className="h-6 w-24 rounded-full" />
         </div>
-        <div className="chart-glass !p-4">
+        <div className="card-metric-glass !rounded-2xl !p-4">
           <div className="space-y-1">
             {Array.from({ length: rowCount }).map((_, index) => (
               <div
@@ -54,7 +49,7 @@ export function DrawerTimelineSkeleton({ rowCount = 4 }: TimelineSkeletonProps) 
             <span className="absolute top-[9px] bottom-[-12px] left-1/2 w-0.5 -translate-x-1/2 bg-[var(--color-border)]" />
             <span className="relative top-1 h-2.5 w-2.5 rounded-full bg-[var(--color-border)]" />
           </div>
-          <div className="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5">
+          <div className="rounded-2xl border border-[var(--color-border)]/85 bg-white/75 px-3.5 py-3 backdrop-blur-[2px]">
             <SkeletonBlock className="h-4 w-40 rounded" />
             <SkeletonBlock className="mt-2 h-3 w-56 rounded" />
           </div>
