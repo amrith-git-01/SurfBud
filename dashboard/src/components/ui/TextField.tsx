@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 
 interface TextFieldProps {
@@ -15,6 +15,9 @@ interface TextFieldProps {
   containerClassName?: string;
   autoComplete?: string;
   required?: boolean;
+  disabled?: boolean;
+  maxLength?: number;
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }
 
 export function TextField({
@@ -31,6 +34,9 @@ export function TextField({
   containerClassName,
   autoComplete,
   required,
+  disabled,
+  maxLength,
+  onKeyDown,
 }: TextFieldProps) {
   const id = useId();
   const [showPassword, setShowPassword] = useState(false);
@@ -60,6 +66,9 @@ export function TextField({
           placeholder={placeholder}
           autoComplete={autoComplete}
           required={required}
+          disabled={disabled}
+          maxLength={maxLength}
+          onKeyDown={onKeyDown}
           aria-invalid={!!error}
           aria-describedby={error ? `${id}-error` : undefined}
           className={clsx(
