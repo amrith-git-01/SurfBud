@@ -103,7 +103,7 @@ export function RecentFeed({
         ) : (
           <>
             <div
-              className="flex-1 overflow-y-auto overflow-x-hidden"
+              className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
               role={listRoleList ? "list" : undefined}
             >
               {listContent}
