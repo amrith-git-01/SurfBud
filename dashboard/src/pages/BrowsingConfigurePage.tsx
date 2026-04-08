@@ -17,6 +17,8 @@ import { SettingsToggleCards } from "@/components/features/configure/shared/Sett
 import { BrowsingDomainRulesSection } from "@/components/features/configure/BrowsingDomainRulesSection";
 import { BrowsingSessionThresholdsSection } from "@/components/features/configure/BrowsingSessionThresholdsSection";
 import { notifyExtensionBrowsingSettingsSync } from "@/utils/authBridge";
+import { useToast } from "@/hooks/useToast";
+import { extractApiErrorMessage } from "@/utils/extractApiErrorMessage";
 
 interface BrowsingConfigureDraft {
   trackingEnabled: boolean;
@@ -52,6 +54,7 @@ function toDraft(settings: BrowsingSettings): BrowsingConfigureDraft {
 }
 
 export function BrowsingConfigurePage() {
+  const { success, error: showErrorToast } = useToast();
   const navigate = useNavigate();
   const { data: settings, isLoading } = useBrowsingSettings();
   const { mutateAsync: updateSettings, isPending } = useUpdateBrowsingSettings();
@@ -188,6 +191,12 @@ export function BrowsingConfigurePage() {
       setInitialDraft(nextInitial);
       setDraft(nextInitial);
       notifyExtensionBrowsingSettingsSync(latest);
+      success("Settings saved", "Browsing preferences synced to your extension.");
+    } catch (err) {
+      showErrorToast(
+        "Could not save settings",
+        extractApiErrorMessage(err, "Please try again."),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -197,84 +206,90 @@ export function BrowsingConfigurePage() {
     isSaving || isPending || isCreatingRule || isUpdatingRule || isDeletingRule;
 
   return (
-    <div className="max-w-[1400px] mx-auto px-8 py-8">
-      <BackButton
-        label="Back to Browsing"
-        onClick={() => navigate("/browsing")}
-        className="mb-6"
-      />
+    <div className="productivity-configure-shell min-h-screen bg-[#faf8ff]">
+      <div className="mx-auto max-w-[1200px] px-6 pb-24 pt-8 md:px-10">
+        <BackButton
+          label="Back to Browsing"
+          onClick={() => navigate("/browsing")}
+          className="mb-6"
+        />
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="section-title-display">Browsing Configuration</h1>
-          <p className="section-description mt-1">
-            Manage how SurfBud tracks your browsing sessions.
-          </p>
+        <header className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 max-w-2xl">
+            <h1 className="section-title-display text-3xl font-bold tracking-tight text-[var(--color-text-heading)] md:text-4xl">
+              Browsing Configuration
+            </h1>
+            <p className="section-description mt-2 max-w-lg text-sm leading-relaxed text-[var(--color-text-muted)] md:text-[13px]">
+              Decide how browsing sessions are recorded and whether clicks, keys, and scrolls are included.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3 sm:pt-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              hoverEffect="flat"
+              className="productivity-outline-pill"
+              onClick={handleCancel}
+              disabled={!isDirty || isBusy || isLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void handleSave()}
+              disabled={!isDirty || isLoading || isBusy}
+              isLoading={isBusy}
+            >
+              Save
+            </Button>
+          </div>
+        </header>
+
+        <div className="flex flex-col gap-8 md:gap-10">
+          <SettingsToggleCards
+            sectionTitle="Master Toggles"
+            sectionDescription="Session logging is the main switch; interaction stats add extra detail when it is on."
+            isLoading={isLoading && !draft}
+            isDisabled={isBusy}
+            cards={[
+              {
+                id: "browsing-tracking",
+                label: "Browsing Tracking",
+                description: "Records site visits and time on page so browsing analytics stay up to date.",
+                checked: draft?.trackingEnabled ?? true,
+                onChange: handleTrackingChange,
+                warningText: "Browsing tracking is off — new sessions are not recorded.",
+              },
+              {
+                id: "interaction-tracking",
+                label: "Interaction Tracking",
+                description: "Counts clicks, keypresses, and scrolls inside each session for richer session detail.",
+                checked: draft?.interactionTrackingEnabled ?? true,
+                onChange: handleInteractionTrackingChange,
+                disabled: !(draft?.trackingEnabled ?? true),
+                disabledTooltip: "Enable browsing tracking first — interactions are attached to sessions.",
+                warningText: "Sessions are still logged, but without interaction counts.",
+              },
+            ]}
+          />
+
+          <BrowsingDomainRulesSection
+            domainRules={draft?.domainRules ?? []}
+            isLoading={isLoading && !draft}
+            isDisabled={isBusy}
+            onDomainRulesChange={handleDomainRulesChange}
+          />
+
+          <BrowsingSessionThresholdsSection
+            minSessionDurationSeconds={draft?.minSessionDurationSeconds ?? 10}
+            mergeGapSeconds={draft?.mergeGapSeconds ?? 30}
+            isLoading={isLoading && !draft}
+            isDisabled={isBusy || !(draft?.trackingEnabled ?? true)}
+            onMinSessionDurationChange={handleMinSessionDurationChange}
+            onMergeGapSecondsChange={handleMergeGapSecondsChange}
+          />
         </div>
-        <div className="flex items-center gap-3 md:pt-1">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleCancel}
-            disabled={!isDirty || isBusy || isLoading}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => void handleSave()}
-            disabled={!isDirty || isLoading || isBusy}
-            isLoading={isBusy}
-          >
-            Save
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-8 space-y-12">
-        <SettingsToggleCards
-          sectionTitle="Master Toggles"
-          sectionDescription="Control whether browsing sessions are tracked."
-          isLoading={isLoading && !draft}
-          isDisabled={isBusy}
-          cards={[
-            {
-              id: "browsing-tracking",
-              label: "Browsing Tracking",
-              description: "Track and record browsing sessions",
-              checked: draft?.trackingEnabled ?? true,
-              onChange: handleTrackingChange,
-              warningText: "SurfBud is not recording browsing sessions",
-            },
-            {
-              id: "interaction-tracking",
-              label: "Interaction Tracking",
-              description: "Track clicks, keypresses, and scrolls within sessions",
-              checked: draft?.interactionTrackingEnabled ?? true,
-              onChange: handleInteractionTrackingChange,
-              disabled: !(draft?.trackingEnabled ?? true),
-              disabledTooltip: "Enable Browsing Tracking first",
-              warningText: "Session activity will be recorded without interaction counts",
-            },
-          ]}
-        />
-
-        <BrowsingDomainRulesSection
-          domainRules={draft?.domainRules ?? []}
-          isLoading={isLoading && !draft}
-          isDisabled={isBusy}
-          onDomainRulesChange={handleDomainRulesChange}
-        />
-
-        <BrowsingSessionThresholdsSection
-          minSessionDurationSeconds={draft?.minSessionDurationSeconds ?? 10}
-          mergeGapSeconds={draft?.mergeGapSeconds ?? 30}
-          isLoading={isLoading && !draft}
-          isDisabled={isBusy || !(draft?.trackingEnabled ?? true)}
-          onMinSessionDurationChange={handleMinSessionDurationChange}
-          onMergeGapSecondsChange={handleMergeGapSecondsChange}
-        />
       </div>
     </div>
   );
