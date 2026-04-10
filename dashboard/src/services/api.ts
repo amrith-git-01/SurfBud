@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "../stores/auth.store";
+import { notifyExtensionLogout } from "../utils/authBridge";
 
 export const api = axios.create({
   baseURL:
@@ -18,6 +19,7 @@ api.interceptors.response.use(
   (error: unknown) => {
     const axiosError = error as { response?: { status: number } };
     if (axiosError.response?.status === 401) {
+      notifyExtensionLogout();
       useAuthStore.getState().clearAuth();
     }
     return Promise.reject(error);
