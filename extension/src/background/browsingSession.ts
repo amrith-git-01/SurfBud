@@ -6,6 +6,8 @@ import type {
 } from "../types/shared/browsing.types";
 import type { BrowsingSettings } from "../types/shared/browsing-settings.types";
 import { extractDomain } from "../utils/downloadHelpers";
+import { getExtensionApiBase } from "../lib/extension-api-base";
+import { getExtensionAuthToken } from "../lib/extension-storage";
 
 const OPEN_SESSION_KEY = "browsingOpenSession";
 const CLOSED_SESSIONS_KEY = "browsingClosedSessions";
@@ -13,8 +15,7 @@ const BATCH_ALARM_NAME = "browsing-batch-send";
 const BROWSING_SETTINGS_STORAGE_KEY = "browsingSettings";
 
 const BATCH_POST_RETRY_DELAYS_MS = [2000, 5000, 12000] as const;
-const API_BASE = "http://localhost:3001/api";
-const AUTH_STORAGE_KEY = "authToken";
+const API_BASE = getExtensionApiBase();
 
 const DEFAULT_BROWSING_SETTINGS: BrowsingSettings = {
   trackingEnabled: true,
@@ -24,18 +25,45 @@ const DEFAULT_BROWSING_SETTINGS: BrowsingSettings = {
   domainRules: [],
 };
 
+function readBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === 1) return true;
+  if (value === "false" || value === 0) return false;
+  return fallback;
+}
+
+export function normalizeBrowsingSettings(
+  raw: Partial<BrowsingSettings> | null | undefined,
+): BrowsingSettings {
+  if (!raw || typeof raw !== "object") {
+    return { ...DEFAULT_BROWSING_SETTINGS };
+  }
+  return {
+    trackingEnabled: readBool(
+      raw.trackingEnabled,
+      DEFAULT_BROWSING_SETTINGS.trackingEnabled,
+    ),
+    interactionTrackingEnabled: readBool(
+      raw.interactionTrackingEnabled,
+      DEFAULT_BROWSING_SETTINGS.interactionTrackingEnabled,
+    ),
+    minSessionDurationSeconds:
+      typeof raw.minSessionDurationSeconds === "number"
+        ? raw.minSessionDurationSeconds
+        : DEFAULT_BROWSING_SETTINGS.minSessionDurationSeconds,
+    mergeGapSeconds:
+      typeof raw.mergeGapSeconds === "number"
+        ? raw.mergeGapSeconds
+        : DEFAULT_BROWSING_SETTINGS.mergeGapSeconds,
+    domainRules: Array.isArray(raw.domainRules)
+      ? raw.domainRules
+      : DEFAULT_BROWSING_SETTINGS.domainRules,
+  };
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
-  });
-}
-
-async function getAuthToken(): Promise<string | null> {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get([AUTH_STORAGE_KEY], (result) => {
-      const token = (result as Record<string, unknown>)[AUTH_STORAGE_KEY];
-      resolve(typeof token === "string" && token.trim().length > 0 ? token : null);
-    });
   });
 }
 
@@ -83,17 +111,13 @@ function shouldTrackBrowsingSession(
   return true;
 }
 
-async function getStoredBrowsingSettings(): Promise<BrowsingSettings> {
+export async function readStoredBrowsingSettings(): Promise<BrowsingSettings> {
   return new Promise((resolve) => {
     chrome.storage.sync.get([BROWSING_SETTINGS_STORAGE_KEY], (result) => {
       const stored = result[BROWSING_SETTINGS_STORAGE_KEY] as
-        | BrowsingSettings
+        | Partial<BrowsingSettings>
         | undefined;
-      resolve({
-        ...DEFAULT_BROWSING_SETTINGS,
-        ...(stored ?? {}),
-        domainRules: stored?.domainRules ?? DEFAULT_BROWSING_SETTINGS.domainRules,
-      });
+      resolve(normalizeBrowsingSettings(stored));
     });
   });
 }
@@ -155,10 +179,38 @@ export async function handleTabBecameActive(
     return;
   }
 
-  const settings = await getStoredBrowsingSettings();
+  let settings = await readStoredBrowsingSettings();
   if (!shouldTrackBrowsingSession(settings, domain)) {
-    await closeCurrentSession();
-    return;
+    // Re-sync from API once in case cached settings are stale.
+    const token = await getExtensionAuthToken();
+    if (token) {
+      try {
+        const response = await fetch(`${API_BASE}/browsing/settings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = (await response.json()) as {
+            success?: boolean;
+            data?: Partial<
+              import("../types/shared/browsing-settings.types").BrowsingSettings
+            >;
+          };
+          if (data.success && data.data) {
+            const normalized = normalizeBrowsingSettings(data.data);
+            await chrome.storage.sync.set({
+              [BROWSING_SETTINGS_STORAGE_KEY]: normalized,
+            });
+            settings = normalized;
+          }
+        }
+      } catch {
+        // keep cached settings on network failure
+      }
+    }
+    if (!shouldTrackBrowsingSession(settings, domain)) {
+      await closeCurrentSession();
+      return;
+    }
   }
 
   const now = new Date();
@@ -207,7 +259,7 @@ export async function handleTabBecameActive(
 }
 
 export async function closeCurrentSession(): Promise<void> {
-  const settings = await getStoredBrowsingSettings();
+  const settings = await readStoredBrowsingSettings();
   const open = await getOpenSession();
   if (!open) return;
   const now = new Date();
@@ -254,7 +306,7 @@ export type BrowsingInteractionKind = "key" | "click" | "scroll";
 export async function recordInteraction(
   kind: BrowsingInteractionKind,
 ): Promise<void> {
-  const settings = await getStoredBrowsingSettings();
+  const settings = await readStoredBrowsingSettings();
   if (!settings.trackingEnabled || !settings.interactionTrackingEnabled) {
     return;
   }
@@ -301,7 +353,7 @@ export async function ensureBrowsingBatchAlarm(): Promise<void> {
 export async function flushBrowsingSessionsQueue(): Promise<void> {
   const sessions = await getClosedSessions();
   if (!sessions.length) return;
-  const token = await getAuthToken();
+  const token = await getExtensionAuthToken();
   if (!token) return;
 
   const maxAttempts = BATCH_POST_RETRY_DELAYS_MS.length + 1;
