@@ -10,7 +10,7 @@ export default defineManifest({
     extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
   },
 
-  permissions: ["storage", "downloads", "sidePanel", "alarms"],
+  permissions: ["storage", "downloads", "sidePanel", "alarms", "tabs"],
 
   host_permissions: [
     "http://localhost:3000/*",
@@ -26,6 +26,10 @@ export default defineManifest({
       matches: [
         "http://localhost/*",
         "http://127.0.0.1/*",
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*",
+        "http://localhost:4173/*",
+        "http://127.0.0.1:4173/*",
         "https://*.surfbud.com/*",
         "https://surfbud.com/*",
       ],
