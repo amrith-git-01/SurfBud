@@ -1,12 +1,3 @@
-// api/src/types/shared/websocket.types.ts
-export type ServerEvent =
-  | "dashboard:download:new"
-  | "dashboard:download:updated"
-  | "dashboard:download:deleted"
-  | "dashboard:metrics:delta"
-  | "dashboard:connection:ack"
-  | "remove:file";
-
 export interface DownloadNewPayload {
   id: string;
   filename: string;
@@ -20,6 +11,7 @@ export interface DownloadNewPayload {
 export interface DownloadUpdatedPayload {
   id: string;
   removed: boolean;
+  filename?: string;
 }
 
 export interface DownloadDeletedPayload {
@@ -46,15 +38,7 @@ export interface RemoveFilePayload {
   hash: string;
 }
 
-export interface ServerToClientEvents {
-  "dashboard:download:new": (data: DownloadNewPayload) => void;
-  "dashboard:download:updated": (data: DownloadUpdatedPayload) => void;
-  "dashboard:download:deleted": (data: DownloadDeletedPayload) => void;
-  "dashboard:metrics:delta": (data: MetricsDeltaPayload) => void;
-  "dashboard:connection:ack": (data: ConnectionAckPayload) => void;
-  "remove:file": (data: RemoveFilePayload) => void;
-}
-
-export interface ClientToServerEvents {
-  // Future: extension → backend events can go here
+export interface TabGroupsUpdatedPayload {
+  userId: string;
+  updatedAt: string;
 }
