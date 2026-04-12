@@ -2,19 +2,6 @@
 import { z } from "zod";
 import { FILE_CATEGORIES } from "../utils/file-utils";
 
-const DownloadRuleValueSchema = z.enum(["dont_track", "track_keep", "track_remove"]);
-const DownloadRuleInputSchema = z
-  .union([DownloadRuleValueSchema, z.literal("never_auto_remove")])
-  .transform((value) =>
-    value === "never_auto_remove" ? "track_keep" : value,
-  );
-const GracePeriodTypeSchema = z.enum(["immediate", "delayed"]);
-const GracePeriodMinutesSchema = z.union([
-  z.literal(0.5),
-  z.literal(15),
-  z.literal(30),
-  z.literal(60),
-]);
 const FileCategorySchema = z.enum(FILE_CATEGORIES);
 
 export const ObjectIdParamSchema = z.object({
@@ -66,22 +53,11 @@ export const UpdateDownloadSettingsSchema = z
   .object({
     trackingEnabled: z.boolean().optional(),
     autoRemoveEnabled: z.boolean().optional(),
-    gracePeriodType: GracePeriodTypeSchema.optional(),
-    gracePeriodMinutes: GracePeriodMinutesSchema.optional(),
     routingEnabled: z.boolean().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field is required",
   });
-
-export const DomainRuleCreateSchema = z.object({
-  domain: z.string().trim().min(1, "Domain is required"),
-  rule: DownloadRuleInputSchema,
-});
-
-export const DomainRuleUpdateSchema = z.object({
-  rule: DownloadRuleInputSchema,
-});
 
 export const RoutingFolderCreateSchema = z.object({
   folderName: z.string().trim().min(1, "Folder name is required").max(50),
@@ -121,32 +97,37 @@ export const EventsQuerySchema = z.preprocess(
     limit: z.coerce.number().int().positive().max(50).default(10),
     sort: z.enum(["newest", "oldest"]).default("newest"),
     status: z.enum(["new", "duplicate"]).optional(),
-    isRemoved: z.preprocess((value) => {
-      if (typeof value === "boolean") return value;
-      if (typeof value === "string") {
-        const normalized = value.trim().toLowerCase();
-        if (normalized === "true") return true;
-        if (normalized === "false") return false;
-      }
-      return undefined;
-    }, z.boolean()).optional(),
+    isRemoved: z
+      .preprocess((value) => {
+        if (typeof value === "boolean") return value;
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (normalized === "true") return true;
+          if (normalized === "false") return false;
+        }
+        return undefined;
+      }, z.boolean())
+      .optional(),
     category: z.string().optional(),
     domain: z.string().min(1).optional(),
     excludeDomains: z
-      .preprocess((value) => {
-        if (Array.isArray(value)) {
-          return value
-            .map((item) => String(item).trim())
-            .filter((item) => item.length > 0);
-        }
-        if (typeof value === "string") {
-          return value
-            .split(",")
-            .map((item) => item.trim())
-            .filter((item) => item.length > 0);
-        }
-        return undefined;
-      }, z.array(z.string().min(1)).max(100))
+      .preprocess(
+        (value) => {
+          if (Array.isArray(value)) {
+            return value
+              .map((item) => String(item).trim())
+              .filter((item) => item.length > 0);
+          }
+          if (typeof value === "string") {
+            return value
+              .split(",")
+              .map((item) => item.trim())
+              .filter((item) => item.length > 0);
+          }
+          return undefined;
+        },
+        z.array(z.string().min(1)).max(100),
+      )
       .optional(),
     search: z.string().optional(),
     date: z
