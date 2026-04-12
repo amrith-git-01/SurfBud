@@ -89,11 +89,6 @@ export interface RemovalLookupInput {
   savedPath?: string;
 }
 
-export interface MarkRemovalScheduledInput extends RemovalLookupInput {
-  jobId: string;
-  scheduledAt: Date;
-}
-
 export interface MarkRemovalFailedInput extends RemovalLookupInput {
   reason?: string;
 }
@@ -183,12 +178,18 @@ export const DownloadEventRepository = {
       if (Types.ObjectId.isValid(options.search)) {
         match._id = new Types.ObjectId(options.search);
       } else {
-        const escapedSearch = options.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const escapedSearch = options.search.replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\$&",
+        );
         match.filename = new RegExp(escapedSearch, "i");
       }
     }
     if (options.domain) {
-      const escapedDomain = options.domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escapedDomain = options.domain.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&",
+      );
       match.sourceDomain = new RegExp(`^${escapedDomain}$`, "i");
     } else if (options.excludeDomains && options.excludeDomains.length > 0) {
       const excludedRegex = options.excludeDomains.map((domain) => {
@@ -243,18 +244,18 @@ export const DownloadEventRepository = {
 
     const countMatch = options.category
       ? await DownloadEvent.aggregate([
-        { $match: match },
-        {
-          $lookup: {
-            from: "files",
-            localField: "fileId",
-            foreignField: "_id",
-            as: "fileDoc",
+          { $match: match },
+          {
+            $lookup: {
+              from: "files",
+              localField: "fileId",
+              foreignField: "_id",
+              as: "fileDoc",
+            },
           },
-        },
-        { $match: { "fileDoc.fileCategory": options.category } },
-        { $count: "total" },
-      ] as unknown as PipelineStage[]).exec()
+          { $match: { "fileDoc.fileCategory": options.category } },
+          { $count: "total" },
+        ] as unknown as PipelineStage[]).exec()
       : null;
 
     const total = options.category
@@ -508,26 +509,6 @@ export const DownloadEventRepository = {
         removalConfirmedAt: now,
       },
       { returnDocument: "after" },
-    )
-      .lean()
-      .exec();
-
-    return doc as IDownloadEvent | null;
-  },
-
-  async markRemovalScheduled(
-    input: MarkRemovalScheduledInput,
-  ): Promise<IDownloadEvent | null> {
-    const doc = await DownloadEvent.findOneAndUpdate(
-      getRemovalLookupFilter(input),
-      {
-        $set: {
-          removalStatus: "scheduled",
-          removalJobId: input.jobId,
-          removalScheduledAt: input.scheduledAt,
-        },
-      },
-      { returnDocument: "after", sort: { createdAt: -1 } },
     )
       .lean()
       .exec();
@@ -818,5 +799,34 @@ export const DownloadEventRepository = {
     }
 
     return filled;
+  },
+
+  async listPendingExtensionRemovals(
+    userId: string,
+  ): Promise<{ savedPath: string; hash: string }[]> {
+    const docs = await DownloadEvent.find({
+      userId: new Types.ObjectId(userId),
+      removalStatus: "pending_extension",
+      isRemoved: false,
+      status: "duplicate",
+      hash: { $exists: true, $nin: [null, ""] },
+      savedPath: { $exists: true, $nin: [null, ""] },
+    })
+      .select({ savedPath: 1, hash: 1 })
+      .lean()
+      .exec();
+
+    const seen = new Set<string>();
+    const out: { savedPath: string; hash: string }[] = [];
+    for (const d of docs) {
+      const sp = typeof d.savedPath === "string" ? d.savedPath.trim() : "";
+      const h = typeof d.hash === "string" ? d.hash.trim() : "";
+      if (!sp || !h) continue;
+      const key = `${h}\0${sp}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ savedPath: sp, hash: h });
+    }
+    return out;
   },
 };
