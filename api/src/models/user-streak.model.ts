@@ -13,6 +13,9 @@ export interface IUserStreak extends Document {
   lastMetAt: string | null;
   skipsUsed: number;
   isActive: boolean;
+  evolvedUrls: string[];
+  evolvedAt: Date | null;
+  tabEvolutionEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,6 +49,9 @@ const userStreakSchema = new Schema<IUserStreak>(
     lastMetAt: { type: String, default: null },
     skipsUsed: { type: Number, default: 0, min: 0 },
     isActive: { type: Boolean, default: true },
+    evolvedUrls: { type: [String], default: [] },
+    evolvedAt: { type: Date, default: null },
+    tabEvolutionEnabled: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

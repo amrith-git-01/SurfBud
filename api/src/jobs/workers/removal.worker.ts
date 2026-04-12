@@ -3,7 +3,7 @@ import { Worker, type Job } from "bullmq";
 import { getBullMQConnection } from "../../config/redis";
 import { QUEUE_NAMES, type RemovalJobData } from "../queues";
 import { DownloadEventRepository } from "../../repositories/download-event.repository";
-import { socketManager } from "../../websocket/socket.manager";
+import { sseManager } from "../../sse/sse.manager";
 import { logger } from "../../utils/logger";
 
 export const removalWorker = new Worker<RemovalJobData>(
@@ -17,7 +17,7 @@ export const removalWorker = new Worker<RemovalJobData>(
       savedPath,
     });
 
-    socketManager.emitRemoveFile(userId, {
+    sseManager.emitRemoveFile(userId, {
       type: "remove:file",
       savedPath,
       hash,

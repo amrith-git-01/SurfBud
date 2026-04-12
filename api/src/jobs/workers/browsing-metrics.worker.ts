@@ -1,7 +1,8 @@
 import { Worker } from "bullmq";
 import { getBullMQConnection } from "../../config/redis";
-import { QUEUE_NAMES } from "../queues";
+import { enqueueStreakCheckJob, QUEUE_NAMES } from "../queues";
 import { BrowsingMetricsService } from "../../services/browsing-metrics.service";
+import { UserRepository } from "../../repositories/user.repository";
 import { logger } from "../../utils/logger";
 import type { BrowsingMetricsJobData } from "../../types/browsing-metrics-job.types";
 
@@ -21,6 +22,15 @@ export const browsingMetricsWorker = new Worker<BrowsingMetricsJobData>(
       "browsing-metrics job: processing",
     );
     await BrowsingMetricsService.processIngestJob(userId, sessions);
+
+    const domains = [...new Set(sessions.map((session) => session.domain))];
+    const user = await UserRepository.findById(userId);
+    await enqueueStreakCheckJob({
+      userId,
+      domains,
+      timezone: user?.timezone ?? "UTC",
+    });
+
     logger.info(
       {
         queue: QUEUE_NAMES.BROWSING_METRICS,

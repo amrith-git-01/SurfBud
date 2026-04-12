@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 
-export type FocusSessionStatus = "active" | "completed" | "abandoned";
+export type FocusSessionStatus = "draft" | "active" | "completed" | "abandoned";
 
 export interface IFocusSession extends Document {
   userId: Types.ObjectId;
@@ -8,7 +8,7 @@ export interface IFocusSession extends Document {
   label: string;
   plannedMins: number | null;
   actualMins: number | null;
-  startedAt: Date;
+  startedAt: Date | null;
   endedAt: Date | null;
   status: FocusSessionStatus;
   createdAt: Date;
@@ -22,13 +22,13 @@ const focusSessionSchema = new Schema<IFocusSession>(
     label: { type: String, required: true, trim: true, maxlength: 100 },
     plannedMins: { type: Number, default: null, min: 1, max: 480 },
     actualMins: { type: Number, default: null, min: 0 },
-    startedAt: { type: Date, default: Date.now },
+    startedAt: { type: Date, default: null },
     endedAt: { type: Date, default: null },
     status: {
       type: String,
       required: true,
-      enum: ["active", "completed", "abandoned"],
-      default: "active",
+      enum: ["draft", "active", "completed", "abandoned"],
+      default: "draft",
     },
   },
   { timestamps: true },
