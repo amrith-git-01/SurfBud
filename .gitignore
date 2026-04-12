@@ -12,6 +12,7 @@ build/
 .env
 .env.local
 .env.*.local
+e2e/.env.e2e.local
 .env.development
 .env.production
 .env.test
@@ -34,6 +35,10 @@ lerna-debug.log*
 # Testing
 coverage/
 .nyc_output/
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
 
 # Editor & IDE
 .vscode/*
