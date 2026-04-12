@@ -7,10 +7,9 @@ import { DownloadMetricsService } from "./download-metrics.service";
 import { DownloadSettingsService } from "./download-settings.service";
 import { NotFoundError } from "../utils/errors";
 import { inferFileCategory } from "../utils/file-utils";
-import { socketManager } from "../websocket/socket.manager";
+import { sseManager } from "../sse/sse.manager";
 
-const MS_PER_MINUTE = 60 * 1000;
-import { scheduleRemoval, cancelRemovalJob } from "../jobs/queues";
+import { cancelRemovalJob } from "../jobs/queues";
 
 export interface DownloadPayload {
   hash: string | null;
@@ -46,7 +45,12 @@ export const DownloadService = {
   async processDownload(
     userId: string,
     payload: DownloadPayload,
-  ): Promise<ProcessResult> {
+  ): Promise<ProcessResult | null> {
+    const downloadSettings = await DownloadSettingsService.getSettings(userId);
+    if (!downloadSettings.trackingEnabled) {
+      return null;
+    }
+
     const inferred = inferFileCategory({
       filename: payload.filename,
       mimeType: payload.mimeType,
@@ -100,7 +104,7 @@ export const DownloadService = {
 
     await DownloadMetricsService.updateOnDownload(userId, file, status);
 
-    socketManager.emitDownloadNew(userId, {
+    sseManager.emitDownloadNew(userId, {
       id: String(event._id),
       filename: event.filename,
       size: file.size ?? 0,
@@ -111,43 +115,20 @@ export const DownloadService = {
     });
 
     if (status === "duplicate" && payload.hash && payload.savedPath) {
-      const decision = await DownloadSettingsService.getRemovalDecision(userId, {
-        sourceDomain: payload.sourceDomain,
-      });
+      const decision = await DownloadSettingsService.getRemovalDecision(userId);
 
       if (decision.shouldAutoRemove) {
-        if (decision.gracePeriodType === "immediate") {
-          await DownloadEventRepository.markRemovalPending({
-            userId,
-            hash: payload.hash,
-            savedPath: payload.savedPath,
-          });
+        await DownloadEventRepository.markRemovalPending({
+          userId,
+          hash: payload.hash,
+          savedPath: payload.savedPath,
+        });
 
-          socketManager.emitRemoveFile(userId, {
-            type: "remove:file",
-            savedPath: payload.savedPath,
-            hash: payload.hash,
-          });
-        } else {
-          const jobId = await scheduleRemoval(
-            userId,
-            payload.savedPath,
-            payload.hash,
-            decision.gracePeriodMinutes,
-          );
-
-          const scheduledAt = new Date(
-            Date.now() + decision.gracePeriodMinutes * MS_PER_MINUTE,
-          );
-
-          await DownloadEventRepository.markRemovalScheduled({
-            userId,
-            hash: payload.hash,
-            savedPath: payload.savedPath,
-            jobId,
-            scheduledAt,
-          });
-        }
+        sseManager.emitRemoveFile(userId, {
+          type: "remove:file",
+          savedPath: payload.savedPath,
+          hash: payload.hash,
+        });
       }
     }
 
@@ -161,7 +142,10 @@ export const DownloadService = {
   async markRemoved(userId: string, eventId: string): Promise<IDownloadEvent> {
     const event = await DownloadEventRepository.markRemoved(eventId, userId);
     if (!event) {
-      const existingEvent = await DownloadEventRepository.findById(eventId, userId);
+      const existingEvent = await DownloadEventRepository.findById(
+        eventId,
+        userId,
+      );
       if (existingEvent) {
         return existingEvent;
       }
@@ -173,9 +157,10 @@ export const DownloadService = {
       await DownloadMetricsService.reconcileDuplicateSize(userId);
     }
 
-    socketManager.emitDownloadUpdated(userId, {
+    sseManager.emitDownloadUpdated(userId, {
       id: String(event._id),
       removed: true,
+      filename: event.filename,
     });
 
     return event;
@@ -199,9 +184,10 @@ export const DownloadService = {
     if (event) {
       await DownloadMetricsService.reconcileDuplicateSize(userId);
 
-      socketManager.emitDownloadUpdated(userId, {
+      sseManager.emitDownloadUpdated(userId, {
         id: String(event._id),
         removed: true,
+        filename: event.filename,
       });
     }
   },
@@ -216,6 +202,14 @@ export const DownloadService = {
       savedPath: input.savedPath,
       reason: input.reason,
     });
+  },
+
+  async listPendingRemovals(userId: string): Promise<{
+    items: { savedPath: string; hash: string }[];
+  }> {
+    const items =
+      await DownloadEventRepository.listPendingExtensionRemovals(userId);
+    return { items };
   },
 
   async getFileById(userId: string, fileId: string): Promise<IFile | null> {
@@ -236,7 +230,11 @@ export const DownloadService = {
       return file;
     }
 
-    void FileRepository.setSavedPathIfMissing(userId, fileId, fallbackSavedPath);
+    void FileRepository.setSavedPathIfMissing(
+      userId,
+      fileId,
+      fallbackSavedPath,
+    );
 
     return {
       ...file,

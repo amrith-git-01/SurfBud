@@ -106,8 +106,10 @@ async function buildDrawerMatch(
   const match: Record<string, unknown> = {};
 
   if (params.from && params.to) {
-    match.startedAt = { $gte: new Date(params.from) };
-    match.endedAt = { $lte: new Date(params.to) };
+    const fromD = new Date(params.from);
+    const toD = new Date(params.to);
+    match.startedAt = { $lt: toD };
+    match.endedAt = { $gt: fromD };
   } else if (params.date) {
     const start = startOfDateInTimezone(params.date, timezone);
     const end = endOfDateInTimezone(params.date, timezone);
