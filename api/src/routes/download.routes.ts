@@ -9,8 +9,6 @@ import {
 import { DownloadController } from "../controllers/download.controller";
 import {
   DownloadStatsDateLimitQuerySchema,
-  DomainRuleCreateSchema,
-  DomainRuleUpdateSchema,
   EventsQuerySchema,
   HashParamSchema,
   ObjectIdParamSchema,
@@ -35,27 +33,6 @@ downloadRouter.patch(
 );
 
 downloadRouter.get(
-  "/settings/rules/domains",
-  DownloadController.getDomainRules,
-);
-downloadRouter.post(
-  "/settings/rules/domains",
-  validate(DomainRuleCreateSchema),
-  DownloadController.createDomainRule,
-);
-downloadRouter.patch(
-  "/settings/rules/domains/:id",
-  validateParams(ObjectIdParamSchema),
-  validate(DomainRuleUpdateSchema),
-  DownloadController.updateDomainRule,
-);
-downloadRouter.delete(
-  "/settings/rules/domains/:id",
-  validateParams(ObjectIdParamSchema),
-  DownloadController.deleteDomainRule,
-);
-
-downloadRouter.get(
   "/settings/routing/folders",
   DownloadController.getRoutingFolders,
 );
@@ -75,6 +52,8 @@ downloadRouter.delete(
   validateParams(ObjectIdParamSchema),
   DownloadController.deleteRoutingFolder,
 );
+
+downloadRouter.get("/removals/pending", DownloadController.listPendingRemovals);
 
 downloadRouter.delete(
   "/removal/:hash",
