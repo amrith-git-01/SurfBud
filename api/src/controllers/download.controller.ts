@@ -10,6 +10,10 @@ export const DownloadController = {
   processDownload: asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const result = await DownloadService.processDownload(userId, req.body);
+    if (!result) {
+      res.status(200).json({ success: true, data: null });
+      return;
+    }
     res.status(201).json({ success: true, data: result });
   }),
 
@@ -18,6 +22,12 @@ export const DownloadController = {
     const eventId = req.params.id as string;
     const event = await DownloadService.markRemoved(userId, eventId);
     res.json({ success: true, data: { event } });
+  }),
+
+  listPendingRemovals: asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const data = await DownloadService.listPendingRemovals(userId);
+    res.json({ success: true, data });
   }),
 
   cancelRemoval: asyncHandler(async (req: Request, res: Response) => {
@@ -53,40 +63,6 @@ export const DownloadController = {
     const settings = await DownloadSettingsService.updateSettings(
       userId,
       req.body,
-    );
-    res.json({ success: true, data: settings });
-  }),
-
-  getDomainRules: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const domainRules = await DownloadSettingsService.getDomainRules(userId);
-    res.json({ success: true, data: { domainRules } });
-  }),
-
-  createDomainRule: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const settings = await DownloadSettingsService.createDomainRule(
-      userId,
-      req.body,
-    );
-    res.status(201).json({ success: true, data: settings });
-  }),
-
-  updateDomainRule: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const settings = await DownloadSettingsService.updateDomainRule(
-      userId,
-      req.params.id as string,
-      req.body,
-    );
-    res.json({ success: true, data: settings });
-  }),
-
-  deleteDomainRule: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const settings = await DownloadSettingsService.deleteDomainRule(
-      userId,
-      req.params.id as string,
     );
     res.json({ success: true, data: settings });
   }),
