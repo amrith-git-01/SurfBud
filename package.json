@@ -1,0 +1,16 @@
+{
+  "name": "surfbud",
+  "private": true,
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:local": "cross-env E2E_SKIP_SERVERS=1 playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:serve": "concurrently -k -n api,dash \"npm run dev --prefix api\" \"cross-env VITE_API_URL=http://127.0.0.1:3001 npm run dev:e2e --prefix dashboard\""
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.7"
+  }
+}

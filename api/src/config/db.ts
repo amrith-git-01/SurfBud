@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { env } from "./env";
+import { UserRoutingFolderModel } from "../models/user-routing-folder.model";
 import { logger } from "../utils/logger";
 
 const MAX_RETRIES = 5;
@@ -9,6 +10,7 @@ export async function connectDB(): Promise<void> {
   while (attempt < MAX_RETRIES) {
     try {
       await mongoose.connect(env.MONGODB_URI);
+      await UserRoutingFolderModel.syncIndexes();
       logger.info("MongoDB connected");
       return;
     } catch (error) {

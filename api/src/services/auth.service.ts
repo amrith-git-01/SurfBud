@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { UserRepository } from "../repositories/user.repository";
 import { env } from "../config/env";
+import { seedProductivityModes } from "../scripts/seed-productivity-modes";
 import { AuthError, ConflictError, ValidationError } from "../utils/errors";
 import type { AuthTokens, JwtPayload } from "../types/shared/auth.types";
 
@@ -38,6 +39,7 @@ export const AuthService = {
       ...(timezone != null && timezone !== "" && { timezone }),
     });
     const userId = String(user._id);
+    await seedProductivityModes(userId);
     const tz = timezone ?? user.timezone ?? "UTC";
     const accessToken = buildToken(userId, email, tz);
     return {

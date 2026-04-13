@@ -8,6 +8,7 @@ const navItems = [
   { id: "dashboard" as const, path: "/dashboard", label: "Dashboard" },
   { id: "downloads" as const, path: "/downloads", label: "Downloads" },
   { id: "browsing" as const, path: "/browsing", label: "Browsing" },
+  { id: "productivity" as const, path: "/productivity", label: "Productivity" },
   { id: "reports" as const, path: "/reports", label: "Reports" },
   { id: "settings" as const, path: "/settings", label: "Settings" },
 ];

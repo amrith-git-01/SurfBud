@@ -1,8 +1,4 @@
 import { Types } from "mongoose";
-import type {
-  GracePeriodMinutes,
-  GracePeriodType,
-} from "../models/user-download-settings.model";
 import {
   type IUserDownloadSettings,
   UserDownloadSettingsModel,
@@ -12,16 +8,12 @@ export interface CreateDefaultDownloadSettingsDto {
   userId: string;
   trackingEnabled: boolean;
   autoRemoveEnabled: boolean;
-  gracePeriodType: GracePeriodType;
-  gracePeriodMinutes: GracePeriodMinutes;
   routingEnabled: boolean;
 }
 
 export interface UpdateDownloadSettingsDto {
   trackingEnabled?: boolean;
   autoRemoveEnabled?: boolean;
-  gracePeriodType?: GracePeriodType;
-  gracePeriodMinutes?: GracePeriodMinutes;
   routingEnabled?: boolean;
 }
 
@@ -44,8 +36,6 @@ export const DownloadSettingsRepository = {
           userId: new Types.ObjectId(data.userId),
           trackingEnabled: data.trackingEnabled,
           autoRemoveEnabled: data.autoRemoveEnabled,
-          gracePeriodType: data.gracePeriodType,
-          gracePeriodMinutes: data.gracePeriodMinutes,
           routingEnabled: data.routingEnabled,
         },
       },

@@ -70,12 +70,33 @@ export const BrowsingDomainStatsRepository = {
                 _id: "$domain",
                 userId: { $first: "$userId" },
                 totalActiveTime: { $sum: "$totalActiveTime" },
-                visitCount: { $sum: "$visitCount" },
+                visitCount: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $lte: [{ $ifNull: ["$visitCount", 0] }, 0] },
+                          { $gt: ["$totalActiveTime", 0] },
+                        ],
+                      },
+                      1,
+                      { $ifNull: ["$visitCount", 0] },
+                    ],
+                  },
+                },
                 longestSession: { $max: "$longestSession" },
                 label: { $first: "$label" },
                 categorySlug: { $first: "$categorySlug" },
                 productivityType: { $first: "$productivityType" },
                 timezone: { $first: "$timezone" },
+              },
+            },
+            {
+              $match: {
+                $or: [
+                  { totalActiveTime: { $gt: 0 } },
+                  { visitCount: { $gt: 0 } },
+                ],
               },
             },
             { $sort: { totalActiveTime: -1 } },
@@ -124,5 +145,21 @@ export const BrowsingDomainStatsRepository = {
     })) as IBrowsingDomainStats[];
 
     return { rows, totalActiveTime };
+  },
+
+  async findByUserDomainAndDateRange(
+    userId: string,
+    domain: string,
+    from: string,
+    to: string,
+  ): Promise<IBrowsingDomainStats[]> {
+    return BrowsingDomainStats.find({
+      userId: new Types.ObjectId(userId),
+      domain: domain.toLowerCase(),
+      date: { $gte: from, $lte: to },
+    })
+      .sort({ date: 1 })
+      .lean()
+      .exec() as Promise<IBrowsingDomainStats[]>;
   },
 };

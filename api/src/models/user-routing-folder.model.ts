@@ -35,7 +35,7 @@ userRoutingFolderSchema.index(
   { userId: 1, category: 1 },
   {
     unique: true,
-    sparse: true,
+    partialFilterExpression: { category: { $type: "string" } },
   },
 );
 

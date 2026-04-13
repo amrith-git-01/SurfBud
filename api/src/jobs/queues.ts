@@ -4,6 +4,7 @@ import { getBullMQConnection } from "../config/redis";
 import { logger } from "../utils/logger";
 import type { BrowsingMetricsJobData } from "../types/browsing-metrics-job.types";
 import type { DomainClassificationJobData } from "../types/domain-classification-job.types";
+import type { StreakCheckJobData } from "../types/streak-check-job.types";
 
 export const QUEUE_NAMES = {
   AI_INSIGHTS: "ai-insights",
@@ -43,6 +44,14 @@ export const removalQueue = new Queue<RemovalJobData>(
 
 export const browsingMetricsQueue = new Queue<BrowsingMetricsJobData>(
   QUEUE_NAMES.BROWSING_METRICS,
+  {
+    connection: getBullMQConnection(),
+    defaultJobOptions,
+  },
+);
+
+export const streakCheckQueue = new Queue<StreakCheckJobData>(
+  QUEUE_NAMES.STREAK_CHECK,
   {
     connection: getBullMQConnection(),
     defaultJobOptions,
@@ -91,7 +100,9 @@ export async function enqueueDomainClassificationJob(
     "delayed",
   );
   const scope =
-    data.domains && data.domains.length > 0 ? "explicit-domains" : "pending-drain";
+    data.domains && data.domains.length > 0
+      ? "explicit-domains"
+      : "pending-drain";
   logger.info(
     {
       queue: QUEUE_NAMES.DOMAIN_CLASSIFICATION,
@@ -107,33 +118,33 @@ export async function enqueueDomainClassificationJob(
   );
 }
 
-export function getRemovalJobId(userId: string, hash: string): string {
-  return `remove:${userId}:${hash}`;
-}
-
-export async function scheduleRemoval(
-  userId: string,
-  savedPath: string,
-  hash: string,
-  gracePeriod: number,
-): Promise<string> {
-  const jobId = getRemovalJobId(userId, hash);
-  const existing = await removalQueue.getJob(jobId);
-
-  if (existing) {
-    await existing.remove();
-  }
-
-  await removalQueue.add(
-    "remove-duplicate",
-    { userId, savedPath, hash },
-    {
-      jobId,
-      delay: gracePeriod * 60 * 1000,
-    },
+export async function enqueueStreakCheckJob(
+  data: StreakCheckJobData,
+): Promise<void> {
+  const job = await streakCheckQueue.add("evaluate-streak", data);
+  const counts = await streakCheckQueue.getJobCounts(
+    "waiting",
+    "active",
+    "delayed",
   );
 
-  return jobId;
+  logger.info(
+    {
+      queue: QUEUE_NAMES.STREAK_CHECK,
+      jobName: "evaluate-streak",
+      jobId: job.id,
+      userId: data.userId,
+      domainCount: data.domains.length,
+      queueWaiting: counts.waiting,
+      queueActive: counts.active,
+      queueDelayed: counts.delayed,
+    },
+    "streak-check job enqueued",
+  );
+}
+
+export function getRemovalJobId(userId: string, hash: string): string {
+  return `remove:${userId}:${hash}`;
 }
 
 export async function cancelRemovalJob(
