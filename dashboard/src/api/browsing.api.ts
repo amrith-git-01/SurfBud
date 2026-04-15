@@ -31,10 +31,6 @@ export interface UserBrowsingMetricsToday {
   productiveTime: number;
   distractingTime: number;
   neutralTime: number;
-  contextSwitches: number;
-  deepFocusSessions: number;
-  sessionCount: number;
-  scatteredPeriods: number;
   topCategorySlug: string | null;
 }
 
@@ -57,10 +53,6 @@ export interface UserBrowsingMetricsPrev {
   todaySitesVisited: number;
   todayLongestSession: number;
   todayProductiveTime: number;
-  todayContextSwitches: number;
-  todaySessionCount: number;
-  todayDeepFocusSessions: number;
-  todayScatteredPeriods: number;
   weekTotalTime: number;
   weekFocusScore: number | null;
   monthTotalTime: number;
@@ -205,11 +197,11 @@ export const BROWSING_STATS_PERIOD_OPTIONS: {
   value: BrowsingStatsPeriod;
   label: string;
 }[] = [
-    { value: "today", label: "Today" },
-    { value: "week", label: "This week" },
-    { value: "month", label: "This month" },
-    { value: "all", label: "All time" },
-  ];
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "all", label: "All time" },
+];
 
 export interface BrowsingStatsDateLimitParams {
   /** Defaults to `today` on the server when omitted. */

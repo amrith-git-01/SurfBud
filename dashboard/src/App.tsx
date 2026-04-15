@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { AppRouter } from "./router/AppRouter";
-import { SocketProvider } from "./contexts/SocketContext";
+import { SSEProvider } from "./contexts/SSEContext";
+import { ToastViewport } from "./components/ui/ToastViewport";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,11 +17,12 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <SocketProvider>
+      <SSEProvider>
         <BrowserRouter>
           <AppRouter />
+          <ToastViewport />
         </BrowserRouter>
-      </SocketProvider>
+      </SSEProvider>
     </QueryClientProvider>
   );
 }

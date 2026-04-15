@@ -100,11 +100,11 @@ export const DOWNLOAD_STATS_PERIOD_OPTIONS: {
   value: DownloadStatsPeriod;
   label: string;
 }[] = [
-    { value: "today", label: "Today" },
-    { value: "week", label: "This week" },
-    { value: "month", label: "This month" },
-    { value: "all", label: "All time" },
-  ];
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "all", label: "All time" },
+];
 
 export interface DownloadStatsDateLimitParams {
   period?: DownloadStatsPeriod;
@@ -149,10 +149,6 @@ const DEFAULT_EVENTS_PARAMS = { page: 1, limit: 10 } as const;
 // Download Configuration Models (new)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type DownloadRuleValue = "dont_track" | "track_keep" | "track_remove";
-export type GracePeriodType = "immediate" | "delayed";
-export type GracePeriodMinutes = 0.5 | 15 | 30 | 60;
-
 export type FileCategory =
   | "document"
   | "video"
@@ -164,12 +160,6 @@ export type FileCategory =
   | "executable"
   | "other";
 
-export interface DomainRule {
-  _id: string;
-  domain: string;
-  rule: DownloadRuleValue;
-}
-
 export interface RoutingFolder {
   _id: string;
   folderName: string;
@@ -179,28 +169,14 @@ export interface RoutingFolder {
 export interface DownloadSettings {
   trackingEnabled: boolean;
   autoRemoveEnabled: boolean;
-  gracePeriodType: GracePeriodType;
-  gracePeriodMinutes: GracePeriodMinutes;
   routingEnabled: boolean;
-  domainRules: DomainRule[];
   routingFolders: RoutingFolder[];
 }
 
 export interface UpdateDownloadSettingsInput {
   trackingEnabled?: boolean;
   autoRemoveEnabled?: boolean;
-  gracePeriodType?: GracePeriodType;
-  gracePeriodMinutes?: GracePeriodMinutes;
   routingEnabled?: boolean;
-}
-
-export interface CreateDomainRuleInput {
-  domain: string;
-  rule: DownloadRuleValue;
-}
-
-export interface UpdateDomainRuleInput {
-  rule: DownloadRuleValue;
 }
 
 export interface CreateRoutingFolderInput {
@@ -232,22 +208,28 @@ export async function getDownloadTrend(
 }
 
 export async function getRecentEvents(): Promise<DownloadEvent[]> {
-  const { data } = await api.get<ApiResponse<EventsResponse>>(`${BASE}/events`, {
-    params: {
-      page: 1,
-      limit: 10,
-      sort: "newest",
+  const { data } = await api.get<ApiResponse<EventsResponse>>(
+    `${BASE}/events`,
+    {
+      params: {
+        page: 1,
+        limit: 10,
+        sort: "newest",
+      },
     },
-  });
+  );
   return data.data?.events ?? [];
 }
 
 export async function getEvents(
   params: EventsQueryParams = {},
 ): Promise<EventsResponse> {
-  const { data } = await api.get<ApiResponse<EventsResponse>>(`${BASE}/events`, {
-    params: { ...DEFAULT_EVENTS_PARAMS, ...params },
-  });
+  const { data } = await api.get<ApiResponse<EventsResponse>>(
+    `${BASE}/events`,
+    {
+      params: { ...DEFAULT_EVENTS_PARAMS, ...params },
+    },
+  );
   return data.data ?? { events: [], total: 0 };
 }
 
@@ -278,9 +260,7 @@ export async function getDomains(
   return data.data?.domains ?? [];
 }
 
-export async function getFileById(
-  fileId: string,
-): Promise<FileDetail | null> {
+export async function getFileById(fileId: string): Promise<FileDetail | null> {
   const { data } = await api.get<ApiResponse<{ file: FileDetail | null }>>(
     `${BASE}/files/${fileId}`,
   );
@@ -301,7 +281,9 @@ export async function getFileTimeline(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getDownloadSettings(): Promise<DownloadSettings> {
-  const { data } = await api.get<ApiResponse<DownloadSettings>>(`${BASE}/settings`);
+  const { data } = await api.get<ApiResponse<DownloadSettings>>(
+    `${BASE}/settings`,
+  );
   return data.data;
 }
 
@@ -315,45 +297,10 @@ export async function updateDownloadSettings(
   return data.data;
 }
 
-export async function getDomainRules(): Promise<DomainRule[]> {
-  const { data } = await api.get<ApiResponse<{ domainRules: DomainRule[] }>>(
-    `${BASE}/settings/rules/domains`,
-  );
-  return data.data.domainRules ?? [];
-}
-
-export async function createDomainRule(
-  payload: CreateDomainRuleInput,
-): Promise<DownloadSettings> {
-  const { data } = await api.post<ApiResponse<DownloadSettings>>(
-    `${BASE}/settings/rules/domains`,
-    payload,
-  );
-  return data.data;
-}
-
-export async function updateDomainRule(
-  id: string,
-  payload: UpdateDomainRuleInput,
-): Promise<DownloadSettings> {
-  const { data } = await api.patch<ApiResponse<DownloadSettings>>(
-    `${BASE}/settings/rules/domains/${id}`,
-    payload,
-  );
-  return data.data;
-}
-
-export async function deleteDomainRule(id: string): Promise<DownloadSettings> {
-  const { data } = await api.delete<ApiResponse<DownloadSettings>>(
-    `${BASE}/settings/rules/domains/${id}`,
-  );
-  return data.data;
-}
-
 export async function getRoutingFolders(): Promise<RoutingFolder[]> {
-  const { data } = await api.get<ApiResponse<{ routingFolders: RoutingFolder[] }>>(
-    `${BASE}/settings/routing/folders`,
-  );
+  const { data } = await api.get<
+    ApiResponse<{ routingFolders: RoutingFolder[] }>
+  >(`${BASE}/settings/routing/folders`);
   return data.data.routingFolders ?? [];
 }
 
@@ -378,7 +325,9 @@ export async function updateRoutingFolder(
   return data.data;
 }
 
-export async function deleteRoutingFolder(id: string): Promise<DownloadSettings> {
+export async function deleteRoutingFolder(
+  id: string,
+): Promise<DownloadSettings> {
   const { data } = await api.delete<ApiResponse<DownloadSettings>>(
     `${BASE}/settings/routing/folders/${id}`,
   );

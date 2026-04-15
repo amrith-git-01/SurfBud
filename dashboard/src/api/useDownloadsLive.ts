@@ -1,103 +1,102 @@
-import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useSocket } from '@/hooks/useSocket';
-import { downloadKeys } from '@/api/useDownloads';
-import type { UserDownloadMetrics } from '@/api/downloads.api';
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSSE } from "@/hooks/useSSE";
+import { downloadKeys } from "@/api/useDownloads";
+import type { UserDownloadMetrics } from "@/api/downloads.api";
+import { useNotificationInboxStore } from "@/stores/notificationInbox.store";
 import type {
+  DownloadNewPayload,
+  DownloadUpdatedPayload,
   MetricsDeltaPayload,
-  RemoveFilePayload,
-} from '@/types/shared/websocket.types';
+} from "@/types/shared/websocket.types";
 
-/**
- * Enable live updates for Downloads page via WebSocket.
- * Call this hook from DownloadsPage to auto-refresh data when downloads occur.
- */
 export function useDownloadsLive() {
   const queryClient = useQueryClient();
-  const { socket, isConnected } = useSocket();
+  const { source, isConnected } = useSSE();
+  const { pathname } = useLocation();
+  const addNotification = useNotificationInboxStore((s) => s.add);
 
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    if (!source || !isConnected) return;
 
-    // Event 1: New download completed
-    const handleDownloadNew = () => {
-      // Invalidate all affected queries
-      // React Query will auto-refetch in background
+    const onDownloadsSection = pathname.startsWith("/downloads");
+
+    const handleDownloadNew = (e: MessageEvent) => {
+      const data = JSON.parse(e.data as string) as DownloadNewPayload;
       queryClient.invalidateQueries({ queryKey: downloadKeys.stats() });
       queryClient.invalidateQueries({ queryKey: downloadKeys.recent() });
       queryClient.invalidateQueries({ queryKey: downloadKeys.categoriesAll() });
       queryClient.invalidateQueries({ queryKey: downloadKeys.domainsAll() });
       queryClient.invalidateQueries({ queryKey: downloadKeys.duplicates() });
-
-      // Also invalidate trend for all periods
       queryClient.invalidateQueries({
-        predicate: (query) => {
-          return (
-            Array.isArray(query.queryKey) &&
-            query.queryKey[0] === 'downloads' &&
-            query.queryKey[1] === 'trend'
-          );
-        },
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          query.queryKey[0] === "downloads" &&
+          query.queryKey[1] === "trend",
       });
+
+      if (!onDownloadsSection) {
+        addNotification({
+          kind: "download",
+          title:
+            data.status === "duplicate" ? "Duplicate download" : "New download",
+          body: data.filename,
+          href: "/downloads",
+        });
+      }
     };
 
-    // Event 2: Download updated (removed flag changed)
-    const handleDownloadUpdated = () => {
-      // Invalidate recent feed and any event lists
+    const handleDownloadUpdated = (e: MessageEvent) => {
+      const data = JSON.parse(e.data as string) as DownloadUpdatedPayload;
       queryClient.invalidateQueries({ queryKey: downloadKeys.recent() });
       queryClient.invalidateQueries({
-        predicate: (query) => {
-          return (
-            Array.isArray(query.queryKey) &&
-            query.queryKey[0] === 'downloads' &&
-            query.queryKey[1] === 'events'
-          );
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          query.queryKey[0] === "downloads" &&
+          query.queryKey[1] === "events",
+      });
+      if (data.removed) {
+        queryClient.invalidateQueries({ queryKey: downloadKeys.duplicates() });
+        queryClient.invalidateQueries({ queryKey: downloadKeys.stats() });
+        queryClient.invalidateQueries({
+          queryKey: downloadKeys.categoriesAll(),
+        });
+        queryClient.invalidateQueries({ queryKey: downloadKeys.domainsAll() });
+        addNotification({
+          kind: "file_remove",
+          title: "File removed from disk",
+          body: data.filename?.trim() || "Duplicate copy removed",
+          href: "/downloads",
+        });
+      }
+    };
+
+    const handleMetricsDelta = (e: MessageEvent) => {
+      const data = JSON.parse(e.data as string) as MetricsDeltaPayload;
+      queryClient.setQueryData(
+        downloadKeys.stats(),
+        (old: UserDownloadMetrics | null | undefined) => {
+          if (!old) return old;
+          return { ...old, ...data };
         },
-      });
+      );
     };
 
-    // Event 2b: Backend requested file removal (immediate or grace-period execution)
-    const handleRemoveFile = (_data: RemoveFilePayload) => {
-      queryClient.invalidateQueries({ queryKey: downloadKeys.recent() });
-      queryClient.invalidateQueries({ queryKey: downloadKeys.duplicates() });
-      queryClient.invalidateQueries({ queryKey: downloadKeys.stats() });
-      queryClient.invalidateQueries({ queryKey: downloadKeys.categoriesAll() });
-      queryClient.invalidateQueries({ queryKey: downloadKeys.domainsAll() });
-      queryClient.invalidateQueries({
-        predicate: (query) => {
-          return (
-            Array.isArray(query.queryKey) &&
-            query.queryKey[0] === 'downloads' &&
-            query.queryKey[1] === 'events'
-          );
-        },
-      });
-    };
+    source.addEventListener("dashboard:download:new", handleDownloadNew);
+    source.addEventListener(
+      "dashboard:download:updated",
+      handleDownloadUpdated,
+    );
+    source.addEventListener("dashboard:metrics:delta", handleMetricsDelta);
 
-    // Event 3: Metrics delta (optional optimization — direct cache update)
-    const handleMetricsDelta = (data: MetricsDeltaPayload) => {
-      // Directly update stats cache without refetch
-      queryClient.setQueryData(downloadKeys.stats(), (old: UserDownloadMetrics | null | undefined) => {
-        if (!old) return old;
-        return {
-          ...old,
-          ...data,
-        };
-      });
-    };
-
-    // Register event listeners
-    socket.on('dashboard:download:new', handleDownloadNew);
-    socket.on('dashboard:download:updated', handleDownloadUpdated);
-    socket.on('remove:file', handleRemoveFile);
-    socket.on('dashboard:metrics:delta', handleMetricsDelta);
-
-    // Cleanup on unmount
     return () => {
-      socket.off('dashboard:download:new', handleDownloadNew);
-      socket.off('dashboard:download:updated', handleDownloadUpdated);
-      socket.off('remove:file', handleRemoveFile);
-      socket.off('dashboard:metrics:delta', handleMetricsDelta);
+      source.removeEventListener("dashboard:download:new", handleDownloadNew);
+      source.removeEventListener(
+        "dashboard:download:updated",
+        handleDownloadUpdated,
+      );
+      source.removeEventListener("dashboard:metrics:delta", handleMetricsDelta);
     };
-  }, [socket, isConnected, queryClient]);
+  }, [source, isConnected, queryClient, pathname, addNotification]);
 }
