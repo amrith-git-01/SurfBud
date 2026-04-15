@@ -61,19 +61,19 @@ export function DrawerListMode({
           : undefined
       }
       footer={
-        <footer className="sticky bottom-0 border-t border-[var(--color-border)] bg-white px-6 py-3">
-          <div className="flex items-center justify-center gap-3">
+        <footer className="sticky bottom-0 border-t border-[var(--color-border)]/80 bg-[#faf8ff]/95 px-5 py-3 backdrop-blur-md sm:px-6">
+          <div className="flex items-center justify-center gap-4">
             <button
               type="button"
               disabled={page <= 1}
               onClick={onPrevPage}
               aria-label="Previous page"
-              className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-full border border-[var(--color-border)] bg-white/80 p-2 text-[var(--color-primary)] shadow-sm transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronLeft size={16} />
             </button>
 
-            <p className="text-sm text-[var(--color-text-secondary)]">
+            <p className="min-w-[7rem] text-center text-xs font-semibold tabular-nums text-[var(--color-text-secondary)]">
               Page {page} of {totalPages}
             </p>
 
@@ -82,7 +82,7 @@ export function DrawerListMode({
               disabled={page >= totalPages}
               onClick={onNextPage}
               aria-label="Next page"
-              className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-full border border-[var(--color-border)] bg-white/80 p-2 text-[var(--color-primary)] shadow-sm transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronRight size={16} />
             </button>
@@ -141,35 +141,41 @@ export function DrawerListMode({
                   onSelectFile(fileId, event._id);
                 }}
                 disabled={!isClickable}
-                className="anim-list-item-enter ui-hover-row mb-3 w-full cursor-pointer rounded-xl border border-[var(--color-border)] bg-white text-left transition-colors duration-150 hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="anim-list-item-enter ui-hover-row mb-2.5 w-full cursor-pointer text-left transition-all duration-150 last:mb-0 disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ animationDelay: `${Math.min(index, 9) * 30}ms` }}
               >
-                <div className="px-5 py-2.5">
-                  <div className="flex items-center gap-3">
+                <div className="chart-glass rounded-xl !p-0 transition-shadow duration-200 hover:shadow-[0_10px_28px_rgba(8,145,178,0.1)]">
+                  <div className="flex items-center gap-3 px-4 py-3 sm:px-4 sm:py-3.5">
                     <FileIcon category={fileCategory} size="md" />
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-medium leading-snug text-[var(--color-text-strong)]">
+                      <p className="truncate text-sm font-semibold leading-snug text-[var(--color-text-heading)]">
                         {event.filename}
                       </p>
-                      <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-text-muted)]">
                         <span className="font-mono text-[var(--color-text-secondary)]">
                           {event.sourceDomain || "unknown"}
                         </span>
-                        <span aria-hidden>&middot;</span>
+                        <span aria-hidden className="text-[var(--color-text-ghost)]">
+                          ·
+                        </span>
                         <span>{toRelativeTime(event.createdAt)}</span>
                         {fileSize != null ? (
                           <>
-                            <span aria-hidden>&middot;</span>
-                            <span className="tabular-nums">{formatBytes(fileSize)}</span>
+                            <span aria-hidden className="text-[var(--color-text-ghost)]">
+                              ·
+                            </span>
+                            <span className="tabular-nums font-medium text-[var(--color-text-body)]">
+                              {formatBytes(fileSize)}
+                            </span>
                           </>
                         ) : null}
                       </div>
                     </div>
 
-                    <div className="ml-2 flex items-center gap-2 self-center">
+                    <div className="flex shrink-0 items-center gap-2 self-center">
                       <StatusBadge status={event.status} />
-                      <ChevronRight size={14} className="text-[var(--color-text-muted)]" aria-hidden />
+                      <ChevronRight size={16} className="text-[var(--color-primary)]/50" aria-hidden />
                     </div>
                   </div>
                 </div>

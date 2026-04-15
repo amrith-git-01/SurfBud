@@ -42,3 +42,8 @@ export interface TabGroupsUpdatedPayload {
   userId: string;
   updatedAt: string;
 }
+
+export interface BrowsingSessionsSyncedPayload {
+  sessionCount: number;
+  syncedAt: string;
+}

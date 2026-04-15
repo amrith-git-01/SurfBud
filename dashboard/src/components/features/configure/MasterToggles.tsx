@@ -1,4 +1,4 @@
-import { SettingsToggleCards } from './shared/SettingsToggleCards';
+import { SettingsToggleCards } from "./shared/SettingsToggleCards";
 
 interface MasterTogglesProps {
   trackingEnabled: boolean;
@@ -19,27 +19,30 @@ export function MasterToggles({
 }: MasterTogglesProps) {
   return (
     <SettingsToggleCards
-      sectionTitle="Master Toggles"
-      sectionDescription="Control core tracking and duplicate-removal behavior."
+      sectionTitle="Core settings"
+      sectionDescription="Turn download logging on or off, and decide whether SurfBud may delete duplicate files automatically."
       isLoading={isLoading}
       isDisabled={isDisabled}
       cards={[
         {
-          id: 'download-tracking',
-          label: 'Download Tracking',
-          description: 'Track and record all downloaded files',
+          id: "download-tracking",
+          label: "Download Tracking",
+          description:
+            "Records each download so it shows up in your dashboard and activity feeds.",
           checked: trackingEnabled,
           onChange: onTrackingChange,
-          warningText: 'SurfBud is not recording any downloads',
+          warningText: "Download tracking is off — nothing new is recorded.",
         },
         {
-          id: 'auto-remove-duplicates',
-          label: 'Auto-remove Duplicates',
-          description: 'Automatically delete duplicate files from your disk',
+          id: "auto-remove-duplicates",
+          label: "Auto-remove Duplicates",
+          description:
+            "When SurfBud detects a duplicate download, it removes the duplicate immediately from the disk.",
           checked: autoRemoveEnabled,
           onChange: onAutoRemoveChange,
           disabled: !trackingEnabled,
-          disabledTooltip: 'Enable Download Tracking first',
+          disabledTooltip:
+            "Enable download tracking first — duplicates are detected from recorded downloads.",
         },
       ]}
     />

@@ -293,7 +293,7 @@ function TopSitesListSkeleton({ hideHeading }: { hideHeading: boolean }) {
     <AnalyticsPanelSkeleton
       hideHeading={hideHeading}
       sectionTitle="Site breakdown"
-      sectionDescription="Active time by domain and share of your total time today."
+      sectionDescription="Shows how much active time each domain used and what fraction of your total that is."
     />
   );
 }

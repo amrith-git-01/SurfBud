@@ -16,9 +16,6 @@ import {
   getFileTimeline,
   getDownloadSettings,
   updateDownloadSettings,
-  createDomainRule,
-  updateDomainRule,
-  deleteDomainRule,
   createRoutingFolder,
   updateRoutingFolder,
   deleteRoutingFolder,
@@ -26,12 +23,9 @@ import {
   type DownloadStatsDateLimitParams,
   type EventsQueryParams,
   type UpdateDownloadSettingsInput,
-  type CreateDomainRuleInput,
-  type UpdateDomainRuleInput,
   type CreateRoutingFolderInput,
   type UpdateRoutingFolderInput,
 } from "./downloads.api";
-
 
 /** Query key factory — single source of truth for cache keys and invalidation */
 export const downloadKeys = {
@@ -66,10 +60,7 @@ type TimelineResult = Awaited<ReturnType<typeof getFileTimeline>>;
 
 /** Section 1 + 3 — metric cards and health bars */
 export function useDownloadStats(
-  options?: Omit<
-    UseQueryOptions<StatsResult>,
-    "queryKey" | "queryFn"
-  >,
+  options?: Omit<UseQueryOptions<StatsResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
     queryKey: downloadKeys.stats(),
@@ -81,10 +72,7 @@ export function useDownloadStats(
 /** Section 2 — activity chart */
 export function useDownloadTrend(
   period: 7 | 15 | 30 = 7,
-  options?: Omit<
-    UseQueryOptions<TrendResult>,
-    "queryKey" | "queryFn"
-  >,
+  options?: Omit<UseQueryOptions<TrendResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
     queryKey: downloadKeys.trend(period),
@@ -95,10 +83,7 @@ export function useDownloadTrend(
 
 /** Section 4 — recent downloads feed */
 export function useRecentEvents(
-  options?: Omit<
-    UseQueryOptions<RecentResult>,
-    "queryKey" | "queryFn"
-  >,
+  options?: Omit<UseQueryOptions<RecentResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
     queryKey: downloadKeys.recent(),
@@ -110,10 +95,7 @@ export function useRecentEvents(
 /** Drawer list — paginated/filtered events */
 export function useDownloadEvents(
   params: EventsQueryParams = {},
-  options?: Omit<
-    UseQueryOptions<EventsResult>,
-    "queryKey" | "queryFn"
-  >,
+  options?: Omit<UseQueryOptions<EventsResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
     queryKey: downloadKeys.events(params),
@@ -124,10 +106,7 @@ export function useDownloadEvents(
 
 /** Section 5 — duplicate groups */
 export function useDuplicateGroups(
-  options?: Omit<
-    UseQueryOptions<DuplicatesResult>,
-    "queryKey" | "queryFn"
-  >,
+  options?: Omit<UseQueryOptions<DuplicatesResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
     queryKey: downloadKeys.duplicates(),
@@ -139,10 +118,7 @@ export function useDuplicateGroups(
 /** Section 6 — file categories */
 export function useCategories(
   params: DownloadStatsDateLimitParams = { period: "today" },
-  options?: Omit<
-    UseQueryOptions<CategoriesResult>,
-    "queryKey" | "queryFn"
-  >,
+  options?: Omit<UseQueryOptions<CategoriesResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
     queryKey: downloadKeys.categories(params),
@@ -154,10 +130,7 @@ export function useCategories(
 /** Section 6 — download sources (domains) */
 export function useDomains(
   params: DownloadStatsDateLimitParams = { period: "today" },
-  options?: Omit<
-    UseQueryOptions<DomainsResult>,
-    "queryKey" | "queryFn"
-  >,
+  options?: Omit<UseQueryOptions<DomainsResult>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
     queryKey: downloadKeys.domains(params),
@@ -201,8 +174,7 @@ export function useFileTimeline(
 /** Invalidate all download-related queries (e.g. after new download from extension) */
 export function useInvalidateDownloads() {
   const queryClient = useQueryClient();
-  return () =>
-    queryClient.invalidateQueries({ queryKey: downloadKeys.all });
+  return () => queryClient.invalidateQueries({ queryKey: downloadKeys.all });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,7 +190,7 @@ export function useDownloadSettings() {
   });
 }
 
-/** Settings page — update top-level toggles and grace period */
+/** Settings page — update top-level toggles */
 export function useUpdateDownloadSettings() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -230,45 +202,12 @@ export function useUpdateDownloadSettings() {
   });
 }
 
-/** Domain rules — add a new rule */
-export function useCreateDomainRule() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: CreateDomainRuleInput) => createDomainRule(payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: downloadKeys.settings() });
-    },
-  });
-}
-
-/** Domain rules — update an existing rule */
-export function useUpdateDomainRule() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateDomainRuleInput }) =>
-      updateDomainRule(id, payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: downloadKeys.settings() });
-    },
-  });
-}
-
-/** Domain rules — delete a rule */
-export function useDeleteDomainRule() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => deleteDomainRule(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: downloadKeys.settings() });
-    },
-  });
-}
-
 /** Routing folders — create a new folder mapping */
 export function useCreateRoutingFolder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CreateRoutingFolderInput) => createRoutingFolder(payload),
+    mutationFn: (payload: CreateRoutingFolderInput) =>
+      createRoutingFolder(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: downloadKeys.settings() });
     },
@@ -279,8 +218,13 @@ export function useCreateRoutingFolder() {
 export function useUpdateRoutingFolder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateRoutingFolderInput }) =>
-      updateRoutingFolder(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: UpdateRoutingFolderInput;
+    }) => updateRoutingFolder(id, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: downloadKeys.settings() });
     },
@@ -304,7 +248,9 @@ export function useCancelRemoval() {
   return useMutation({
     mutationFn: (hash: string) => cancelRemoval(hash),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: downloadKeys.duplicates() });
+      void queryClient.invalidateQueries({
+        queryKey: downloadKeys.duplicates(),
+      });
       void queryClient.invalidateQueries({ queryKey: downloadKeys.recent() });
     },
   });

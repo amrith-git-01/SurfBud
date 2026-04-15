@@ -68,11 +68,11 @@ export function DrawerShell({
     >
       <aside
         className={[
-          "fixed right-0 top-0 h-full w-[640px] max-w-[100vw] sm:max-w-[95vw] bg-white",
-          "transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+          "fixed right-0 top-0 h-full w-[min(100vw,420px)] sm:w-[min(100vw,480px)] lg:w-[560px]",
+          "bg-[#faf8ff] transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
           isPanelVisible ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
-        style={{ boxShadow: "-8px 0 32px rgba(8,145,178,0.12)" }}
+        style={{ boxShadow: "-12px 0 40px rgba(8,145,178,0.14)" }}
         onMouseDown={(event) => event.stopPropagation()}
         aria-label={ariaLabel}
       >

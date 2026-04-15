@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { TextField } from "@/components/ui/TextField";
-import { ConfigureSectionSkeleton } from "./ConfigureSectionSkeleton";
-
+import { BrowsingCategoryIconBadge } from "@/components/ui/BrowsingCategoryIconBadge";
 export interface DomainRuleOption<T extends string> {
   label: string;
   value: T;
@@ -21,6 +20,9 @@ export interface DomainSuggestion {
   meta: string;
   tagLabel?: string;
   tagTone?: "positive" | "negative" | "neutral";
+  domainLogo?: string;
+  categoryIcon?: string;
+  categoryColor?: string;
 }
 
 interface DomainRulesEditorProps<T extends string> {
@@ -66,10 +68,12 @@ function DomainSuggestionRow({
   suggestion,
   index,
   onAdd,
+  disabled = false,
 }: {
   suggestion: DomainSuggestion;
   index: number;
   onAdd: (domainName: string) => void;
+  disabled?: boolean;
 }) {
   const tagClassName =
     suggestion.tagTone === "positive"
@@ -78,36 +82,67 @@ function DomainSuggestionRow({
         ? "bg-[var(--color-danger-light)] text-[var(--color-danger)]"
         : "bg-gray-100 text-[var(--color-text-muted)]";
 
+  const label = suggestion.domain;
+
   return (
     <div
-      className="anim-list-item-enter ui-hover-row mr-1 flex items-center justify-between rounded-lg border border-[var(--color-border)] px-3 py-2 transition-colors duration-150 hover:bg-[var(--color-bg-hover)]"
+      className="anim-list-item-enter ui-hover-row mr-1 flex items-center justify-between rounded-lg border border-[var(--color-border)] px-3 py-2"
       style={{ animationDelay: `${Math.min(index, 9) * 30}ms` }}
     >
-      <div className="min-w-0">
-        <p className="truncate text-xs font-semibold text-[var(--color-text-heading)]">
-          {suggestion.domain}
-        </p>
-        <div className="mt-0.5 flex items-center gap-2">
-          <p className="truncate text-[11px] text-[var(--color-text-muted)]">
-            {suggestion.meta}
+      <div className="min-w-0 flex items-center gap-3">
+        {suggestion.domainLogo?.trim() ? (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-50">
+            <img
+              src={suggestion.domainLogo!.trim()}
+              alt=""
+              className="h-full w-full object-contain"
+              referrerPolicy="no-referrer"
+            />
+          </span>
+        ) : suggestion.categoryIcon ? (
+          <span className="flex h-8 w-8 items-center justify-center">
+            <BrowsingCategoryIconBadge
+              iconName={suggestion.categoryIcon}
+              color={suggestion.categoryColor ?? "#6b7280"}
+              size="lg"
+              className="h-full w-full"
+            />
+          </span>
+        ) : (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-400">
+            <Globe className="h-4 w-4" strokeWidth={2} />
+          </span>
+        )}
+
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold text-[var(--color-text-heading)]">
+            {label}
           </p>
-          {suggestion.tagLabel ? (
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${tagClassName}`}
-            >
-              {suggestion.tagLabel}
-            </span>
-          ) : null}
+          <div className="mt-0.5 flex items-center gap-2">
+            <p className="truncate text-[11px] text-[var(--color-text-muted)]">
+              {suggestion.meta}
+            </p>
+            {suggestion.tagLabel ? (
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${tagClassName}`}
+              >
+                {suggestion.tagLabel}
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
-      <button
-        type="button"
+
+      <Button
+        size="sm"
+        variant="secondary"
+        hoverEffect="flat"
+        disabled={disabled}
         onClick={() => onAdd(suggestion.domain)}
-        className="ml-3 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
-        aria-label={`Use ${suggestion.domain}`}
+        className="shrink-0 [&>span]:h-8 [&>span]:px-3 [&>span]:py-1.5"
       >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
+        Add
+      </Button>
     </div>
   );
 }
@@ -207,7 +242,9 @@ export function DomainRulesEditor<T extends string>({
       const existing = domainRules.find((rule) => rule._id === editingRuleId);
       if (!existing) return;
       if (normalized !== existing.domain.toLowerCase()) {
-        setError("Domain cannot be changed while editing. Delete and add a new rule.");
+        setError(
+          "Domain cannot be changed while editing. Delete and add a new rule.",
+        );
         return;
       }
 
@@ -247,208 +284,222 @@ export function DomainRulesEditor<T extends string>({
 
   if (isLoading) {
     return (
-      <ConfigureSectionSkeleton
-        title={title}
-        description={description}
-        cardClassName="h-[320px]"
-      >
-          <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-2">
-            <div className="flex h-full flex-col">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_190px_auto] sm:items-center">
-                <div className="skeleton h-8 w-full rounded-lg" />
-                <div className="skeleton h-8 w-full rounded-md" />
-                <div className="skeleton h-8 w-24 rounded-md" />
-              </div>
-              <div className="mt-4 min-h-0 flex-1">
-                <div className="skeleton h-3 w-24 rounded" />
-                <div className="mt-2 space-y-2 h-[calc(100%-22px)]">
-                  <div className="skeleton h-12 w-full rounded-lg" />
-                  <div className="skeleton h-12 w-full rounded-lg" />
-                  <div className="skeleton h-12 w-full rounded-lg" />
-                </div>
-              </div>
+      <section>
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+            {title}
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            {description}
+          </p>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
+          <div className="card-metric-glass flex h-[320px] min-h-0 flex-col p-5">
+            <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_190px_auto] sm:items-center">
+              <div className="skeleton h-8 w-full rounded-lg" />
+              <div className="skeleton h-8 w-full rounded-md" />
+              <div className="skeleton h-8 w-24 rounded-md" />
             </div>
-
-            <div className="flex h-full flex-col min-h-0 lg:border-l lg:border-[var(--color-border)] lg:pl-5">
-              <div className="skeleton h-3 w-44 rounded" />
-              <div className="mt-2 skeleton h-8 w-full rounded-lg" />
-              <div className="mt-2 space-y-2 min-h-0 flex-1">
+            <div className="mt-4 flex min-h-0 flex-1 flex-col">
+              <div className="skeleton h-3 w-24 rounded" />
+              <div className="mt-2 min-h-0 flex-1 space-y-2">
                 <div className="skeleton h-12 w-full rounded-lg" />
                 <div className="skeleton h-12 w-full rounded-lg" />
                 <div className="skeleton h-12 w-full rounded-lg" />
               </div>
             </div>
           </div>
-      </ConfigureSectionSkeleton>
+          <div className="card-metric-glass flex h-[320px] min-h-0 flex-col p-5">
+            <div className="skeleton h-3 w-44 rounded" />
+            <div className="mt-2 skeleton h-8 w-full rounded-lg" />
+            <div className="mt-2 min-h-0 flex-1 space-y-2">
+              <div className="skeleton h-12 w-full rounded-lg" />
+              <div className="skeleton h-12 w-full rounded-lg" />
+              <div className="skeleton h-12 w-full rounded-lg" />
+            </div>
+          </div>
+        </div>
+      </section>
     );
   }
 
   return (
     <section>
       <div className="mb-4">
-        <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">{title}</h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">{description}</p>
+        <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+          {title}
+        </h3>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          {description}
+        </p>
       </div>
 
-      <div className="card-metric-glass p-5 mt-4 h-[320px]">
-        <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-2">
-          <div className="flex h-full flex-col">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_190px_auto] sm:items-center">
-              <div className={isMutating ? "pointer-events-none opacity-60" : ""}>
-                <TextField
-                  label="Domain"
-                  showLabel={false}
-                  type="text"
-                  value={domainInput}
-                  onChange={(value) => {
-                    setDomainInput(value);
-                    if (error) setError(null);
-                  }}
-                  onClear={() => {
-                    setDomainInput("");
-                    if (error) setError(null);
-                  }}
-                  placeholder={domainPlaceholder}
-                  className="h-8 py-1.5 text-xs border rounded-lg"
-                  containerClassName="!space-y-0"
-                  autoComplete="off"
-                />
-              </div>
-
-              <Dropdown<T>
-                value={selectedRule}
-                options={ruleOptions}
-                onChange={setSelectedRule}
-                disabled={isMutating}
-                size="sm"
-                buttonClassName="justify-between w-full"
-              />
-
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => void handleSubmit()}
-                disabled={!domainInput.trim() || isMutating}
-                className="w-full sm:w-auto [&>span]:h-8 [&>span]:px-4 [&>span]:py-1.5"
-              >
-                {editingRuleId ? "Save" : "Add Rule"}
-              </Button>
-            </div>
-
-            {error ? <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p> : null}
-
-            {editingRuleId ? (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="mt-2 cursor-pointer text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
-              >
-                Cancel edit
-              </button>
-            ) : null}
-
-            <div className="mt-4 min-h-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                Active Rules
-              </p>
-
-              {domainRules.length === 0 ? (
-                <p className="mt-2 text-xs text-[var(--color-text-muted)]">{emptyRulesText}</p>
-              ) : filteredDomainRules.length === 0 ? (
-                <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-                  No active rules match your search.
-                </p>
-              ) : (
-                <div className="mt-2 space-y-2 h-[calc(100%-22px)] overflow-y-auto overflow-x-hidden pr-1">
-                  {filteredDomainRules.map((rule, index) => (
-                    <div
-                      key={rule._id}
-                      className="anim-list-item-enter ui-hover-row mr-1 flex items-center justify-between rounded-lg border border-[var(--color-border)] px-3 py-2 transition-colors duration-150 hover:bg-[var(--color-bg-hover)]"
-                      style={{ animationDelay: `${Math.min(index, 9) * 30}ms` }}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold text-[var(--color-text-heading)]">
-                          {rule.domain}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
-                          {ruleLabelMap.get(rule.rule) ?? rule.rule}
-                        </p>
-                      </div>
-                      <div className="ml-3 flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(rule._id)}
-                          className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] disabled:cursor-not-allowed"
-                          aria-label={`Edit ${rule.domain}`}
-                          disabled={isMutating}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(rule._id)}
-                          className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-danger)] hover:bg-[var(--color-danger-light)] disabled:cursor-not-allowed"
-                          aria-label={`Delete ${rule.domain}`}
-                          disabled={isMutating}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex h-full flex-col min-h-0 lg:border-l lg:border-[var(--color-border)] lg:pl-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-              {suggestionsTitle}
-            </p>
-
-            <div className="mt-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
+        <div className="card-metric-glass flex h-[320px] min-h-0 flex-col p-5">
+          <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_190px_auto] sm:items-center">
+            <div className={isMutating ? "pointer-events-none opacity-60" : ""}>
               <TextField
-                label="Search domains"
+                label="Domain"
                 showLabel={false}
                 type="text"
-                value={searchInput}
-                onChange={setSearchInput}
-                onClear={() => setSearchInput("")}
-                placeholder="Search active rules and suggestions"
+                value={domainInput}
+                onChange={(value) => {
+                  setDomainInput(value);
+                  if (error) setError(null);
+                }}
+                onClear={() => {
+                  setDomainInput("");
+                  if (error) setError(null);
+                }}
+                placeholder={domainPlaceholder}
                 className="h-8 py-1.5 text-xs border rounded-lg"
                 containerClassName="!space-y-0"
                 autoComplete="off"
               />
             </div>
 
-            {isSuggestionsLoading ? (
-              <div className="mt-2 space-y-2">
-                <div className="skeleton h-12 w-full rounded" />
-                <div className="skeleton h-12 w-full rounded" />
-                <div className="skeleton h-12 w-full rounded" />
-              </div>
-            ) : sortedSuggestions.length === 0 ? (
-              <p className="mt-2 text-xs text-[var(--color-text-muted)]">{emptySuggestionsText}</p>
-            ) : filteredSuggestions.length === 0 ? (
+            <Dropdown<T>
+              value={selectedRule}
+              options={ruleOptions}
+              onChange={setSelectedRule}
+              disabled={isMutating}
+              size="sm"
+              buttonClassName="justify-between w-full"
+            />
+
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleSubmit()}
+              disabled={!domainInput.trim() || isMutating}
+              className="w-full sm:w-auto [&>span]:h-8 [&>span]:px-4 [&>span]:py-1.5"
+            >
+              {editingRuleId ? "Save" : "Add Rule"}
+            </Button>
+          </div>
+
+          {error ? (
+            <p className="mt-2 shrink-0 text-xs text-[var(--color-danger)]">
+              {error}
+            </p>
+          ) : null}
+
+          {editingRuleId ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="mt-2 shrink-0 cursor-pointer text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
+            >
+              Cancel edit
+            </button>
+          ) : null}
+
+          <div className="mt-4 flex min-h-0 flex-1 flex-col">
+            <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+              Active Rules
+            </p>
+
+            {domainRules.length === 0 ? (
               <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-                No suggested domains match your search.
+                {emptyRulesText}
+              </p>
+            ) : filteredDomainRules.length === 0 ? (
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                No active rules match your search.
               </p>
             ) : (
-              <div className="mt-2 space-y-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
-                {filteredSuggestions.map((suggestion, index) => (
-                  <DomainSuggestionRow
-                    key={suggestion.domain}
-                    suggestion={suggestion}
-                    index={index}
-                    onAdd={(domainName) => {
-                      setDomainInput(domainName);
-                      if (error) setError(null);
-                    }}
-                  />
+              <div className="mt-2 min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto pr-1">
+                {filteredDomainRules.map((rule, index) => (
+                  <div
+                    key={rule._id}
+                    className="anim-list-item-enter ui-hover-row mr-1 flex items-center justify-between rounded-lg border border-[var(--color-border)] px-3 py-2"
+                    style={{ animationDelay: `${Math.min(index, 9) * 30}ms` }}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-[var(--color-text-heading)]">
+                        {rule.domain}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+                        {ruleLabelMap.get(rule.rule) ?? rule.rule}
+                      </p>
+                    </div>
+                    <div className="ml-3 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(rule._id)}
+                        className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] disabled:cursor-not-allowed"
+                        aria-label={`Edit ${rule.domain}`}
+                        disabled={isMutating}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(rule._id)}
+                        className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-danger)] hover:bg-[var(--color-danger-light)] disabled:cursor-not-allowed"
+                        aria-label={`Delete ${rule.domain}`}
+                        disabled={isMutating}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
           </div>
+        </div>
+
+        <div className="card-metric-glass flex h-[320px] min-h-0 flex-col p-5">
+          <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            {suggestionsTitle}
+          </p>
+
+          <div className="mt-2 shrink-0">
+            <TextField
+              label="Search domains"
+              showLabel={false}
+              type="text"
+              value={searchInput}
+              onChange={setSearchInput}
+              onClear={() => setSearchInput("")}
+              placeholder="Search active rules and suggestions"
+              className="h-8 py-1.5 text-xs border rounded-lg"
+              containerClassName="!space-y-0"
+              autoComplete="off"
+            />
+          </div>
+
+          {isSuggestionsLoading ? (
+            <div className="mt-2 min-h-0 flex-1 space-y-2">
+              <div className="skeleton h-12 w-full rounded" />
+              <div className="skeleton h-12 w-full rounded" />
+              <div className="skeleton h-12 w-full rounded" />
+            </div>
+          ) : sortedSuggestions.length === 0 ? (
+            <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+              {emptySuggestionsText}
+            </p>
+          ) : filteredSuggestions.length === 0 ? (
+            <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+              No suggested domains match your search.
+            </p>
+          ) : (
+            <div className="mt-2 min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto pr-1">
+              {filteredSuggestions.map((suggestion, index) => (
+                <DomainSuggestionRow
+                  key={suggestion.domain}
+                  suggestion={suggestion}
+                  index={index}
+                  disabled={isMutating}
+                  onAdd={(domainName) => {
+                    setDomainInput(domainName);
+                    if (error) setError(null);
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </section>

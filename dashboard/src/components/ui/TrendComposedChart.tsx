@@ -33,10 +33,7 @@ export interface TrendTooltipRowConfig {
   color: string;
   /** When set, value comes only from datum (row not tied to a plotted series). */
   getDisplayValue?: (datum: TrendPoint) => string | number;
-  formatter?: (
-    value: number,
-    datum: TrendPoint | undefined,
-  ) => string | number;
+  formatter?: (value: number, datum: TrendPoint | undefined) => string | number;
 }
 
 interface TrendComposedChartProps {
@@ -104,10 +101,7 @@ function ChartSkeleton({ hideHeading = false }: { hideHeading?: boolean }) {
   );
 }
 
-function isEffectivelyEmpty(
-  data: TrendPoint[],
-  keys: string[],
-): boolean {
+function isEffectivelyEmpty(data: TrendPoint[], keys: string[]): boolean {
   if (data.length === 0) return true;
   return data.every((row) =>
     keys.every((key) => {
@@ -169,7 +163,9 @@ export function TrendComposedChart({
           />
         </div>
         <div className="flex-1 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-inset)] flex items-center justify-center">
-          <p className="text-sm text-[var(--color-text-muted)]">{emptyMessage}</p>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            {emptyMessage}
+          </p>
         </div>
       </div>
     );
@@ -202,16 +198,11 @@ export function TrendComposedChart({
         return {
           color: row.color,
           label: row.label,
-          value: row.getDisplayValue(
-            datum ?? { date: "", displayDate: "" },
-          ),
+          value: row.getDisplayValue(datum ?? { date: "", displayDate: "" }),
         };
       }
-      const raw =
-        payload.find((p) => p.dataKey === row.key)?.value ?? 0;
-      const value = row.formatter
-        ? row.formatter(raw, datum)
-        : raw;
+      const raw = payload.find((p) => p.dataKey === row.key)?.value ?? 0;
+      const value = row.formatter ? row.formatter(raw, datum) : raw;
       return {
         color: row.color,
         label: row.label,
@@ -220,11 +211,7 @@ export function TrendComposedChart({
     });
 
     return (
-      <ChartTooltip
-        label={headerLabel}
-        rows={rows}
-        squareIndicatorIndex={0}
-      />
+      <ChartTooltip label={headerLabel} rows={rows} squareIndicatorIndex={0} />
     );
   };
 
@@ -289,8 +276,7 @@ export function TrendComposedChart({
               tick={{ fontSize: 10, fill: "#94A3B8" }}
               tickFormatter={
                 yAxisTickFormatter
-                  ? (v: number | string) =>
-                      yAxisTickFormatter(Number(v))
+                  ? (v: number | string) => yAxisTickFormatter(Number(v))
                   : undefined
               }
             />
@@ -309,7 +295,8 @@ export function TrendComposedChart({
               onClick={(clicked) => {
                 if (!onBarClick) return;
                 const date = (clicked as { date?: string })?.date;
-                const label = (clicked as { displayDate?: string })?.displayDate;
+                const label = (clicked as { displayDate?: string })
+                  ?.displayDate;
                 if (!date || !label) return;
                 onBarClick({ date, label });
               }}
@@ -343,19 +330,27 @@ export function TrendComposedChart({
 
       <div className="flex justify-center flex-row gap-6 mt-6">
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: barSeries.color }} />
+          <div
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: barSeries.color }}
+          />
           <span className="text-xs text-[#64748B]">{barSeries.label}</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: line1.color }} />
+          <div
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: line1.color }}
+          />
           <span className="text-xs text-[#64748B]">{line1.label}</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: line2.color }} />
+          <div
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: line2.color }}
+          />
           <span className="text-xs text-[#64748B]">{line2.label}</span>
         </div>
       </div>
     </div>
   );
 }
-

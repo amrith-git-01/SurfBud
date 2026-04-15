@@ -4,7 +4,7 @@ import type { BrowsingProductivityType } from "@/api/browsing.api";
 import { BrowsingCategoryIconBadge } from "@/components/ui/BrowsingCategoryIconBadge";
 import { formatDurationSeconds } from "@/utils/formatDuration";
 import { formatSessionTimeRangeInZone } from "@/utils/formatSessionTimeRange";
-import { ChevronLeft, Globe, X } from "lucide-react";
+import { ArrowLeft, Globe, X } from "lucide-react";
 
 const PRODUCTIVITY_BADGE: Record<BrowsingProductivityType, { bg: string; color: string; label: string }> = {
   productive: { bg: "#D1FAE5", color: "#16A34A", label: "Productive" },
@@ -82,8 +82,10 @@ export function BrowsingSessionDetail({
   const catIcon = categoryIcon?.trim();
   const catCol = categoryColor?.trim();
 
+  const headerTitle = `Session Details: ${label}`;
+
   const leading = logo ? (
-    <span className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-[20px] bg-gray-100">
+    <span className="flex h-[76px] w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-[22px] border border-white/70 bg-gray-100 shadow-[0_10px_36px_rgba(8,145,178,0.14),0_2px_8px_rgba(8,145,178,0.06)]">
       <img
         src={logo}
         alt=""
@@ -92,12 +94,16 @@ export function BrowsingSessionDetail({
       />
     </span>
   ) : catIcon && catCol ? (
-    <BrowsingCategoryIconBadge iconName={catIcon} color={catCol} size="lg" />
+    <span className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-[22px] border border-white/70 bg-white/30 shadow-[0_10px_36px_rgba(8,145,178,0.14),0_2px_8px_rgba(8,145,178,0.06)]">
+      <BrowsingCategoryIconBadge iconName={catIcon} color={catCol} size="lg" />
+    </span>
   ) : slug && session.domainColor ? (
-    <BrowsingCategoryIconBadge iconName="Globe" color={session.domainColor} size="lg" />
+    <span className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-[22px] border border-white/70 bg-white/30 shadow-[0_10px_36px_rgba(8,145,178,0.14),0_2px_8px_rgba(8,145,178,0.06)]">
+      <BrowsingCategoryIconBadge iconName="Globe" color={session.domainColor} size="lg" />
+    </span>
   ) : (
     <span
-      className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-[20px] text-[#94A3B8]"
+      className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-[22px] border border-white/70 text-[var(--color-text-ghost)] shadow-[0_10px_36px_rgba(8,145,178,0.14),0_2px_8px_rgba(8,145,178,0.06)]"
       style={{ backgroundColor: "#F1F5F9" }}
     >
       <Globe className="h-9 w-9" strokeWidth={2} aria-hidden />
@@ -143,35 +149,41 @@ export function BrowsingSessionDetail({
   ];
 
   return (
-    <div className="flex h-full flex-col bg-white font-sans">
-      <header className="border-b border-[var(--color-border)] px-6 py-4">
+    <div className="flex h-full flex-col bg-[#faf8ff] font-sans">
+      <header className="border-b border-[var(--color-border)]/80 bg-[#faf8ff]/95 px-5 py-4 backdrop-blur-sm sm:px-6">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {onBack ? (
               <button
                 type="button"
                 onClick={onBack}
                 aria-label="Back to sessions"
-                className="inline-flex items-center gap-2 text-sm font-medium text-[var(--color-text-muted)] transition-colors duration-150 hover:text-[var(--color-text-body)]"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-transparent text-[var(--color-primary)] transition-colors hover:border-[var(--color-border)] hover:bg-white/80"
               >
-                <ChevronLeft size={16} />
-                <span>Sessions</span>
+                <ArrowLeft size={18} strokeWidth={2} />
               </button>
             ) : null}
+            <h2
+              className="min-w-0 truncate text-base font-bold leading-tight text-[var(--color-primary)] sm:text-lg"
+              style={{ fontFamily: "var(--font-display)" }}
+              title={headerTitle}
+            >
+              {headerTitle}
+            </h2>
           </div>
 
           <button
             type="button"
             onClick={onClose}
             aria-label="Close drawer"
-            className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors duration-150 hover:bg-[var(--color-danger-light)] hover:text-[var(--color-danger)]"
+            className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border)] hover:bg-white/80 hover:text-[var(--color-text-heading)]"
           >
-            <X size={18} />
+            <X size={18} strokeWidth={2} />
           </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
         <div
           className="flex flex-col items-center text-center transition-all duration-200 ease-out"
           style={{
@@ -197,8 +209,8 @@ export function BrowsingSessionDetail({
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="section-label mb-0">SESSION DETAILS</p>
           </div>
-          <div className="chart-glass !p-4">
-            <div className="divide-y divide-[var(--color-border)]">
+          <div className="card-metric-glass !rounded-2xl !p-0 !shadow-[0_8px_32px_rgba(8,145,178,0.08),0_2px_10px_rgba(8,145,178,0.04)] hover:!translate-y-0 hover:!shadow-[0_8px_32px_rgba(8,145,178,0.08),0_2px_10px_rgba(8,145,178,0.04)]">
+            <div className="divide-y divide-[var(--color-border)]/90 px-4 py-1">
               {detailRows.map((row, index) => (
                 <div
                   key={row.label}
@@ -230,8 +242,8 @@ export function BrowsingSessionDetail({
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="section-label mb-0">INTERACTIONS</p>
           </div>
-          <div className="chart-glass !p-4">
-            <div className="divide-y divide-[var(--color-border)]">
+          <div className="card-metric-glass !rounded-2xl !p-0 !shadow-[0_8px_32px_rgba(8,145,178,0.08),0_2px_10px_rgba(8,145,178,0.04)] hover:!translate-y-0 hover:!shadow-[0_8px_32px_rgba(8,145,178,0.08),0_2px_10px_rgba(8,145,178,0.04)]">
+            <div className="divide-y divide-[var(--color-border)]/90 px-4 py-1">
               {interactionRows.map((row, index) => (
                 <div
                   key={row.label}
@@ -258,7 +270,7 @@ export function BrowsingSessionDetail({
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="section-label mb-0">CAPTURED FIELDS</p>
           </div>
-          <div className="chart-glass !p-4">
+          <div className="card-metric-glass !rounded-2xl !p-4 !shadow-[0_8px_32px_rgba(8,145,178,0.08),0_2px_10px_rgba(8,145,178,0.04)] hover:!translate-y-0 hover:!shadow-[0_8px_32px_rgba(8,145,178,0.08),0_2px_10px_rgba(8,145,178,0.04)]">
             <div className="space-y-4">
               <div
                 className="transition-all duration-200 ease-out"

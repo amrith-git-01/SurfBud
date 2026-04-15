@@ -3,6 +3,7 @@ import { getBullMQConnection } from "../../config/redis";
 import { enqueueStreakCheckJob, QUEUE_NAMES } from "../queues";
 import { BrowsingMetricsService } from "../../services/browsing-metrics.service";
 import { UserRepository } from "../../repositories/user.repository";
+import { sseManager } from "../../sse/sse.manager";
 import { logger } from "../../utils/logger";
 import type { BrowsingMetricsJobData } from "../../types/browsing-metrics-job.types";
 
@@ -22,6 +23,11 @@ export const browsingMetricsWorker = new Worker<BrowsingMetricsJobData>(
       "browsing-metrics job: processing",
     );
     await BrowsingMetricsService.processIngestJob(userId, sessions);
+
+    sseManager.emitBrowsingSynced(userId, {
+      sessionCount: sessions.length,
+      syncedAt: new Date().toISOString(),
+    });
 
     const domains = [...new Set(sessions.map((session) => session.domain))];
     const user = await UserRepository.findById(userId);

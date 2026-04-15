@@ -11,8 +11,9 @@ import { RecentDownloadsFeed } from "@/components/features/downloads/RecentDownl
 import { DuplicateGroups } from "../components/features/downloads/DuplicateGroups";
 import { FileCategories } from "../components/features/downloads/FileCategories";
 import { DownloadSources } from "../components/features/downloads/DownloadSources";
-import { useDownloadsLive } from "@/api/useDownloadsLive";
 import { useDownloadSettings } from "@/api/useDownloads";
+import { Button } from "@/components/ui/Button";
+import { TrackingStatusBadge } from "@/components/ui/TrackingStatusBadge";
 import {
   FileDetailDrawer,
   type DrawerDetailView,
@@ -74,7 +75,6 @@ const PRESET_BY_HEALTH_TARGET: Record<HealthBarsClickTarget, DrawerListPreset> =
 };
 
 export function DownloadsPage() {
-  useDownloadsLive();
   const navigate = useNavigate();
   const { data: settings } = useDownloadSettings();
   const trackingEnabled = settings?.trackingEnabled ?? true;
@@ -130,132 +130,181 @@ export function DownloadsPage() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto px-8 py-8">
-      {/* Header row: title + Configure button */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1
-              className="font-display font-bold text-xl text-[var(--color-text-heading)] leading-tight"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              Downloads
-            </h1>
-            {trackingEnabled ? (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-success)] bg-[#f0fdf4] border border-[#bbf7d0] rounded-full px-2.5 py-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block" />
-                Tracking active
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-text-muted)] bg-[#f1f5f9] border border-[#e2e8f0] rounded-full px-2.5 py-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#CBD5E1] inline-block" />
-                Tracking paused
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Track and manage your downloads.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate('/downloads/configure')}
-          className="flex-shrink-0 mt-1"
-        >
-          <span className="btn-inner btn-secondary px-3.5 py-1.5 text-xs">
-            <Settings className="w-3.5 h-3.5" />
-            Configure
-          </span>
-        </button>
-      </div>
-      <div className="mt-8 space-y-12">
-        <DownloadMetricCards onCardClick={(card) => openListDrawer(PRESET_BY_CARD[card])} />
-        
-        {/* Recent Activity Section - 2 Column Layout */}
-        <div>
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Recent Activity</h3>
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              Monitor new and duplicate downloads in real time and inspect file-level details quickly.
+    <div className="productivity-configure-shell min-h-screen bg-[#faf8ff]">
+      <div className="mx-auto max-w-[1200px] px-6 pb-24 pt-8 md:px-10">
+        <header className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="section-title-display text-3xl font-bold tracking-tight text-[var(--color-text-heading)] md:text-4xl">
+                Downloads
+              </h1>
+              <TrackingStatusBadge enabled={trackingEnabled} />
+            </div>
+            <p className="section-description mt-2 max-w-xl text-sm text-[var(--color-text-muted)] md:text-[13px]">
+              Monitor download volume, duplicate files, and how much disk space they use.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-6">
-            <div className="col-span-2">
-              <DownloadActivityChart
-                hideHeading
-                onDayClick={({ date, label }) =>
-                  openListDrawer({
-                    title: `Downloads on ${label}`,
-                    period: "all",
-                    date,
-                  })
-                }
-              />
-            </div>
-            <div className="col-span-1">
-              <RecentDownloadsFeed
-                hideHeading
-                onOpenDetail={({ eventId, fileId, filename, createdAt }) =>
-                  openDetailDrawer(fileId, {
-                    eventId,
-                    canGoBack: true,
-                    detailView: "details",
-                    listPreset: {
-                      title: `File Details: ${filename}`,
-                      period: "all",
-                      search: eventId,
-                      date: toIsoDate(createdAt),
-                    },
-                  })
-                }
-                onOpenAll={() => openListDrawer(DEFAULT_LIST_PRESET)}
-              />
-            </div>
-          </div>
-        </div>
-        
-        <DownloadHealthBars
-          onFilterClick={(target) => openListDrawer(PRESET_BY_HEALTH_TARGET[target])}
-        />
-        <DuplicateGroups
-          onOpenTimeline={({ fileId }) => {
-            openDetailDrawer(fileId, {
-              canGoBack: false,
-              detailView: "timeline",
-              eventSelectionMode: "original",
-            });
-          }}
-        />
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            hoverEffect="flat"
+            className="productivity-outline-pill shrink-0"
+            onClick={() => navigate("/downloads/configure")}
+          >
+            <Settings className="h-3.5 w-3.5" />
+            Configure
+          </Button>
+        </header>
 
-        {/* Analytics Section - 2 Column Layout */}
-        <div className="grid grid-cols-2 gap-6">
-          <FileCategories
-            onCategoryClick={(category) =>
-              openListDrawer({
-                title: `${category.charAt(0).toUpperCase()}${category.slice(1)} Files`,
-                period: "all",
-                category: category as DrawerListPreset["category"],
-              })
-            }
-            onShowAll={() => openListDrawer(DEFAULT_LIST_PRESET)}
-          />
-          <DownloadSources
-            onDomainClick={(domain) =>
-              openListDrawer({
-                title: `${domain} Downloads`,
-                period: "all",
-                domain,
-              })
-            }
-            onOthersClick={(excludedDomains) =>
-              openListDrawer({
-                title: "Other Domains Downloads",
-                period: "all",
-                excludeDomains: excludedDomains,
-              })
-            }
-            onShowAll={() => openListDrawer(DEFAULT_LIST_PRESET)}
-          />
+        <div className="flex flex-col gap-8 md:gap-10">
+          <section aria-labelledby="downloads-overview-heading">
+            <h2
+              id="downloads-overview-heading"
+              className="text-sm font-semibold text-[var(--color-text-heading)]"
+            >
+              Overview
+            </h2>
+            <p className="section-description mt-1 text-xs text-[var(--color-text-muted)]">
+              Quick totals for today, this week, this month, and how much space duplicates cost you.
+            </p>
+            <div className="mt-4">
+              <DownloadMetricCards
+                hideSectionHeader
+                onCardClick={(card) => openListDrawer(PRESET_BY_CARD[card])}
+              />
+            </div>
+          </section>
+
+          <section aria-labelledby="downloads-recent-heading">
+            <h2
+              id="downloads-recent-heading"
+              className="text-sm font-semibold text-[var(--color-text-heading)]"
+            >
+              Recent activity
+            </h2>
+            <p className="section-description mt-1 text-xs text-[var(--color-text-muted)]">
+              Activity over time next to a live list; click any row to open full file details.
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+              <div className="min-h-0 lg:col-span-2">
+                <DownloadActivityChart
+                  hideHeading
+                  onDayClick={({ date, label }) =>
+                    openListDrawer({
+                      title: `Downloads on ${label}`,
+                      period: "all",
+                      date,
+                    })
+                  }
+                />
+              </div>
+              <div className="min-h-0 lg:col-span-1">
+                <RecentDownloadsFeed
+                  hideHeading
+                  onOpenDetail={({ eventId, fileId, filename, createdAt }) =>
+                    openDetailDrawer(fileId, {
+                      eventId,
+                      canGoBack: true,
+                      detailView: "details",
+                      listPreset: {
+                        title: `File Details: ${filename}`,
+                        period: "all",
+                        search: eventId,
+                        date: toIsoDate(createdAt),
+                      },
+                    })
+                  }
+                  onOpenAll={() => openListDrawer(DEFAULT_LIST_PRESET)}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section aria-labelledby="downloads-health-heading">
+            <h2
+              id="downloads-health-heading"
+              className="text-sm font-semibold text-[var(--color-text-heading)]"
+            >
+              Library health
+            </h2>
+            <p className="section-description mt-1 text-xs text-[var(--color-text-muted)]">
+              How your library splits between new files and duplicates, for both file count and total size.
+            </p>
+            <div className="mt-4">
+              <DownloadHealthBars
+                hideSectionHeader
+                onFilterClick={(target) => openListDrawer(PRESET_BY_HEALTH_TARGET[target])}
+              />
+            </div>
+          </section>
+
+          <section aria-labelledby="downloads-duplicates-heading">
+            <h2
+              id="downloads-duplicates-heading"
+              className="text-sm font-semibold text-[var(--color-text-heading)]"
+            >
+              Duplicate groups
+            </h2>
+            <p className="section-description mt-1 text-xs text-[var(--color-text-muted)]">
+              Files that appear more than once, grouped so you can review history and open the timeline.
+            </p>
+            <div className="mt-4">
+              <DuplicateGroups
+                hideSectionHeader
+                onOpenTimeline={({ fileId }) => {
+                  openDetailDrawer(fileId, {
+                    canGoBack: false,
+                    detailView: "timeline",
+                    eventSelectionMode: "original",
+                  });
+                }}
+              />
+            </div>
+          </section>
+
+          <section aria-labelledby="downloads-analytics-heading">
+            <h2
+              id="downloads-analytics-heading"
+              className="text-sm font-semibold text-[var(--color-text-heading)]"
+            >
+              Analytics
+            </h2>
+            <p className="section-description mt-1 text-xs text-[var(--color-text-muted)]">
+              Breakdown by file type and by download source. Adjust the period inside each chart.
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+              <FileCategories
+                hideHeading
+                onCategoryClick={(category) =>
+                  openListDrawer({
+                    title: `${category.charAt(0).toUpperCase()}${category.slice(1)} Files`,
+                    period: "all",
+                    category: category as DrawerListPreset["category"],
+                  })
+                }
+                onShowAll={() => openListDrawer(DEFAULT_LIST_PRESET)}
+              />
+              <DownloadSources
+                hideHeading
+                onDomainClick={(domain) =>
+                  openListDrawer({
+                    title: `${domain} Downloads`,
+                    period: "all",
+                    domain,
+                  })
+                }
+                onOthersClick={(excludedDomains) =>
+                  openListDrawer({
+                    title: "Other Domains Downloads",
+                    period: "all",
+                    excludeDomains: excludedDomains,
+                  })
+                }
+                onShowAll={() => openListDrawer(DEFAULT_LIST_PRESET)}
+              />
+            </div>
+          </section>
         </div>
       </div>
 

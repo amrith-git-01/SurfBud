@@ -13,12 +13,6 @@ export interface IUserBrowsingMetricsToday {
   productiveTime: number;
   distractingTime: number;
   neutralTime: number;
-  contextSwitches: number;
-  deepFocusSessions: number;
-  /** Raw session rows for today (for avg session = totalActiveTime / sessionCount). */
-  sessionCount: number;
-  /** Local calendar hours with ≥10 domain switches (see spec §9.2). */
-  scatteredPeriods: number;
   topCategorySlug: string | null;
 }
 
@@ -41,10 +35,6 @@ export interface IUserBrowsingMetricsPrev {
   todaySitesVisited: number;
   todayLongestSession: number;
   todayProductiveTime: number;
-  todayContextSwitches: number;
-  todaySessionCount: number;
-  todayDeepFocusSessions: number;
-  todayScatteredPeriods: number;
   weekTotalTime: number;
   weekFocusScore: number | null;
   monthTotalTime: number;
@@ -78,10 +68,6 @@ const todaySchema = new Schema<IUserBrowsingMetricsToday>(
     productiveTime: { type: Number, default: 0, min: 0 },
     distractingTime: { type: Number, default: 0, min: 0 },
     neutralTime: { type: Number, default: 0, min: 0 },
-    contextSwitches: { type: Number, default: 0, min: 0 },
-    deepFocusSessions: { type: Number, default: 0, min: 0 },
-    sessionCount: { type: Number, default: 0, min: 0 },
-    scatteredPeriods: { type: Number, default: 0, min: 0 },
     topCategorySlug: { type: String, default: null },
   },
   { _id: false },
@@ -110,10 +96,6 @@ const prevSchema = new Schema<IUserBrowsingMetricsPrev>(
     todaySitesVisited: { type: Number, default: 0, min: 0 },
     todayLongestSession: { type: Number, default: 0, min: 0 },
     todayProductiveTime: { type: Number, default: 0, min: 0 },
-    todayContextSwitches: { type: Number, default: 0, min: 0 },
-    todaySessionCount: { type: Number, default: 0, min: 0 },
-    todayDeepFocusSessions: { type: Number, default: 0, min: 0 },
-    todayScatteredPeriods: { type: Number, default: 0, min: 0 },
     weekTotalTime: { type: Number, default: 0, min: 0 },
     weekFocusScore: { type: Number, default: null, min: 0, max: 100 },
     monthTotalTime: { type: Number, default: 0, min: 0 },

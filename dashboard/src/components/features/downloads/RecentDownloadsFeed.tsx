@@ -45,7 +45,7 @@ export function RecentDownloadsFeed({
       onRetry={() => refetch()}
       errorMessage="Could not load recent downloads"
       emptyTitle="No recent downloads"
-      emptyDescription="Recent downloads will appear here."
+      emptyDescription="When the extension records new files, they will show up in this list automatically."
       skeleton={<RecentFeedSkeletonRows trailingSlot rowCount={10} />}
       hasItems={rows.length > 0}
       listContent={rows.map((event) => (
@@ -59,9 +59,10 @@ export function RecentDownloadsFeed({
         <button
           type="button"
           onClick={onOpenAll}
-          className="text-xs font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-700)] transition-colors duration-200"
+          className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-[var(--color-primary)] transition-colors duration-200 hover:text-[var(--color-primary-700)]"
         >
-          View all downloads -&gt;
+          <span>View all downloads</span>
+          <ChevronRight className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
         </button>
       }
     />
@@ -104,14 +105,14 @@ function DownloadEventRow({
             {event.filename}
           </p>
           <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
-            <span className="min-w-0 flex-1 truncate font-mono text-[var(--color-text-secondary)]">
-              {event.sourceDomain || "unknown"}
+            <span className="shrink-0 whitespace-nowrap">
+              {formatRelativeTime(event.createdAt)}
             </span>
             <span className="shrink-0" aria-hidden>
               &middot;
             </span>
-            <span className="shrink-0 whitespace-nowrap">
-              {formatRelativeTime(event.createdAt)}
+            <span className="min-w-0 flex-1 truncate font-mono text-[var(--color-text-secondary)]">
+              {event.sourceDomain || "unknown"}
             </span>
           </div>
         </div>

@@ -17,10 +17,6 @@ export const EMPTY_USER_BROWSING_TODAY: IUserBrowsingMetricsToday = {
   productiveTime: 0,
   distractingTime: 0,
   neutralTime: 0,
-  contextSwitches: 0,
-  deepFocusSessions: 0,
-  sessionCount: 0,
-  scatteredPeriods: 0,
   topCategorySlug: null,
 };
 

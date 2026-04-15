@@ -1,5 +1,8 @@
 import { useMemo } from "react";
-import { useBrowsingDomainStats } from "@/api/useBrowsing";
+import {
+  useBrowsingDomainStats,
+  useBrowsingCategories,
+} from "@/api/useBrowsing";
 import type {
   BrowsingDomainRule,
   BrowsingRuleValue,
@@ -33,6 +36,24 @@ export function BrowsingDomainRulesSection({
     { staleTime: 30_000 },
   );
 
+  const { data: categories = [] } = useBrowsingCategories();
+
+  const slugToIcon = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of categories) {
+      if (c.slug) m.set(c.slug, c.icon);
+    }
+    return m;
+  }, [categories]);
+
+  const slugToColor = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of categories) {
+      if (c.slug) m.set(c.slug, c.color);
+    }
+    return m;
+  }, [categories]);
+
   const suggestions = useMemo(() => {
     const domains = data?.domains ?? [];
     return [...domains]
@@ -63,18 +84,24 @@ export function BrowsingDomainRulesSection({
           meta: `${domain.visitCount} ${domain.visitCount === 1 ? "session" : "sessions"} · ${durationLabel}`,
           tagLabel,
           tagTone,
+          domainLogo: domain.domainLogo ?? undefined,
+          categoryIcon: slugToIcon.get(domain.categorySlug) ?? undefined,
+          categoryColor:
+            domain.domainColor ??
+            slugToColor.get(domain.categorySlug) ??
+            undefined,
         };
       });
-  }, [data?.domains]);
+  }, [data?.domains, slugToIcon, slugToColor]);
 
   return (
     <DomainRulesEditor<BrowsingRuleValue>
       title="Domain rules"
-      description="Define per-domain browsing tracking behavior."
+      description="Choose which sites count toward browsing analytics and which are ignored."
       domainPlaceholder="www.example.com"
-      emptyRulesText="No rules added yet. Add a domain rule above."
+      emptyRulesText="No domain rules yet — add a hostname and choose Track or Don't track."
       suggestionsTitle="Domains From Your Browsing"
-      emptySuggestionsText="No browsing sessions recorded yet. Browse a few sites to see suggestions here."
+      emptySuggestionsText="No sessions recorded yet. After you browse, suggested domains will show up here."
       domainRules={domainRules as DomainRuleItem<BrowsingRuleValue>[]}
       ruleOptions={RULE_OPTIONS}
       defaultRule="track"
@@ -82,7 +109,9 @@ export function BrowsingDomainRulesSection({
       isLoading={isLoading}
       isDisabled={isDisabled}
       isSuggestionsLoading={isDomainsLoading}
-      onDomainRulesChange={(next) => onDomainRulesChange(next as BrowsingDomainRule[])}
+      onDomainRulesChange={(next) =>
+        onDomainRulesChange(next as BrowsingDomainRule[])
+      }
     />
   );
 }

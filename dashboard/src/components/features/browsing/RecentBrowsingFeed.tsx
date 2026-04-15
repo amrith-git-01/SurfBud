@@ -8,7 +8,7 @@ import { RecentFeed, RecentFeedSkeletonRows } from "@/components/ui/RecentFeed";
 import { BrowsingCategoryIconBadge } from "@/components/ui/BrowsingCategoryIconBadge";
 import { formatDurationSeconds } from "@/utils/formatDuration";
 import { formatRelativeTime } from "@/utils/formatRelativeTime";
-import { Globe } from "lucide-react";
+import { ChevronRight, Globe } from "lucide-react";
 import type { BrowsingDrawerTrigger } from "./browsingDrawer.types";
 
 const RECENT_SESSIONS_FEED_LIMIT = 10;
@@ -51,7 +51,7 @@ export function RecentBrowsingFeed({
       onRetry={() => refetch()}
       errorMessage="Could not load recent sessions"
       emptyTitle="No recent sessions"
-      emptyDescription="Browsing time from the extension will show up here."
+      emptyDescription="Once the extension records sessions, the most recent ones will list here."
       skeleton={<RecentFeedSkeletonRows rowCount={10} />}
       hasItems={rows.length > 0}
       listRoleList
@@ -71,9 +71,10 @@ export function RecentBrowsingFeed({
         <button
           type="button"
           onClick={onOpenAll}
-          className="text-xs font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-700)] transition-colors duration-200"
+          className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-[var(--color-primary)] transition-colors duration-200 hover:text-[var(--color-primary-700)]"
         >
-          View all sessions -&gt;
+          <span>View all sessions</span>
+          <ChevronRight className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
         </button>
       }
     />

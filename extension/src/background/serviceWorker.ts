@@ -1,10 +1,9 @@
 /// <reference types="chrome" />
 import { createSHA256 } from "hash-wasm";
-import { io, type Socket } from "socket.io-client";
 import {
-  inferFileCategory,
-  extractFilename,
+  inferFileCategoryFromDownloadItem,
   extractDomain,
+  resolveDownloadBasename,
 } from "../utils/downloadHelpers";
 import {
   handleTabBecameActive,
@@ -14,71 +13,101 @@ import {
   handleAlarm as handleBrowsingAlarm,
   finalizeOrphanedSessionOnStartup,
   recordInteraction,
+  normalizeBrowsingSettings,
 } from "./browsingSession";
+import { openTabGroupUrls, openUrlsInBrowserWindow } from "./tab-group-window";
+import {
+  clearTabGroupTrackingState,
+  flushTabEvolutionPendingQueue,
+  focusTrackedTabGroupWindowIfExists,
+  getOpenStreakIds,
+  getOpenTabGroupIds,
+  pruneStaleTrackedWindows,
+  startTabEvolutionSession,
+} from "./tab-evolution";
 import type {
   DownloadSettings,
   DownloadSettingsSyncPayload,
-  DownloadRuleValue,
   FileCategory,
 } from "../types/shared/download-settings.types";
 import type {
   BrowsingSettings,
   BrowsingSettingsSyncPayload,
 } from "../types/shared/browsing-settings.types";
+import type {
+  ProductivityUserSettings,
+  TabGroupActivationPayload,
+} from "../types/shared/productivity.types";
+import { getExtensionApiBase } from "../lib/extension-api-base";
+import {
+  AUTH_SESSION_KEYS,
+  getExtensionAuthToken,
+} from "../lib/extension-storage";
+import {
+  DEFAULT_PRODUCTIVITY_USER_SETTINGS,
+  PRODUCTIVITY_USER_SETTINGS_STORAGE_KEY,
+  PRODUCTIVITY_USER_SETTINGS_SYNCED_AT_KEY,
+} from "../lib/extension-productivity-user-settings";
 
-const API_BASE = "http://localhost:3001/api";
-const SOCKET_BASE = API_BASE.endsWith("/api")
-  ? API_BASE.slice(0, -4)
-  : API_BASE;
+const API_BASE = getExtensionApiBase();
 
-/** Matches `GET /api/health` on the API — poll until HTTP server listens (after Redis/DB bootstrap). */
-const SOCKET_HEALTH_PATH = "/api/health";
-/** Polling first avoids websocket-only failures; keep attempts low to reduce console noise. */
-const SOCKET_RECONNECT_ATTEMPTS = 3;
-const SOCKET_RECONNECT_DELAY_MS = 5000;
-const SOCKET_RECONNECT_DELAY_MAX_MS = 30000;
-/** Backstop if the API was down — retries socket without tight reconnect loops. */
-const SOCKET_RECONNECT_ALARM = "surfbud-socket-reconnect";
-const SOCKET_RECONNECT_ALARM_MINUTES = 15;
-
-async function waitForApiHealth(baseUrl: string): Promise<boolean> {
-  const url = `${baseUrl.replace(/\/$/, "")}${SOCKET_HEALTH_PATH}`;
-  let delayMs = 200;
-  const maxDelayMs = 4000;
-  const maxAttempts = 20;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const res = await fetch(url, { method: "GET", cache: "no-store" });
-      if (res.ok) {
-        return true;
-      }
-    } catch {
-      /* connection refused until server listens */
-    }
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, delayMs);
-    });
-    delayMs = Math.min(Math.floor(delayMs * 1.35), maxDelayMs);
-  }
-
-  return false;
-}
-const AUTH_STORAGE_KEY = "authToken";
+const PENDING_REMOVAL_POLL_ALARM = "surfbud-pending-removal-poll";
+const PENDING_REMOVAL_POLL_MINUTES = 1;
 const SETTINGS_STORAGE_KEY = "downloadSettings";
 const SETTINGS_SYNCED_AT_STORAGE_KEY = "downloadSettingsSyncedAt";
 const BROWSING_SETTINGS_STORAGE_KEY = "browsingSettings";
 const BROWSING_SETTINGS_SYNCED_AT_STORAGE_KEY = "browsingSettingsSyncedAt";
 
+interface ProductivityUserSettingsSyncPayload {
+  settings: ProductivityUserSettings;
+  syncedAt: string;
+  source: "extension-fetch" | "dashboard";
+}
+
 const DEFAULT_SETTINGS: DownloadSettings = {
   trackingEnabled: true,
   autoRemoveEnabled: false,
-  gracePeriodType: "delayed",
-  gracePeriodMinutes: 15,
   routingEnabled: false,
-  domainRules: [],
   routingFolders: [],
 };
+
+function readSyncedBoolean(value: unknown, defaultValue: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (value === "true" || value === 1) {
+    return true;
+  }
+  if (value === "false" || value === 0) {
+    return false;
+  }
+  return defaultValue;
+}
+
+function normalizeDownloadSettings(
+  raw: DownloadSettings | Partial<DownloadSettings> | undefined | null,
+): DownloadSettings {
+  if (!raw || typeof raw !== "object") {
+    return { ...DEFAULT_SETTINGS };
+  }
+  return {
+    trackingEnabled: readSyncedBoolean(
+      raw.trackingEnabled,
+      DEFAULT_SETTINGS.trackingEnabled,
+    ),
+    autoRemoveEnabled: readSyncedBoolean(
+      raw.autoRemoveEnabled,
+      DEFAULT_SETTINGS.autoRemoveEnabled,
+    ),
+    routingEnabled: readSyncedBoolean(
+      raw.routingEnabled,
+      DEFAULT_SETTINGS.routingEnabled,
+    ),
+    routingFolders: Array.isArray(raw.routingFolders)
+      ? raw.routingFolders
+      : DEFAULT_SETTINGS.routingFolders,
+  };
+}
 
 const DEFAULT_BROWSING_SETTINGS: BrowsingSettings = {
   trackingEnabled: true,
@@ -89,6 +118,16 @@ const DEFAULT_BROWSING_SETTINGS: BrowsingSettings = {
 };
 
 const RETRY_DELAYS_MS = [2000, 4000, 8000] as const;
+
+function ensureSidePanelOpensOnToolbarClick(): void {
+  try {
+    if (typeof chrome.sidePanel?.setPanelBehavior === "function") {
+      void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    }
+  } catch {
+    /* Side Panel API unavailable */
+  }
+}
 
 /** Payload for POST /api/downloads (ProcessDownloadSchema) */
 interface ApiDownloadPayload {
@@ -136,15 +175,57 @@ interface BrowsingInteractionMessage {
   };
 }
 
+interface ProductivityActivateMessage {
+  type: "PRODUCTIVITY_ACTIVATE";
+  payload: TabGroupActivationPayload;
+}
+
+interface ProductivityTabGroupsStateMessage {
+  type: "PRODUCTIVITY_TAB_GROUPS_STATE";
+}
+
+interface ProductivityOpenStreakMessage {
+  type: "PRODUCTIVITY_OPEN_STREAK";
+  payload: {
+    streakId: string;
+    domain: string;
+    hostWindowId?: number;
+  };
+}
+
+interface ProductivityUserSettingsSyncMessage {
+  type: "PRODUCTIVITY_USER_SETTINGS_SYNC";
+  payload: ProductivityUserSettingsSyncPayload;
+}
+
 type RuntimeMessage =
   | AuthSuccessMessage
   | AuthLogoutMessage
   | SettingsSyncMessage
   | BrowsingSettingsSyncMessage
-  | BrowsingInteractionMessage;
+  | BrowsingInteractionMessage
+  | ProductivityActivateMessage
+  | ProductivityOpenStreakMessage
+  | ProductivityTabGroupsStateMessage
+  | ProductivityUserSettingsSyncMessage;
 
-let removalSocket: Socket | null = null;
-let activeSocketToken: string | null = null;
+const tabGroupActivationInFlight = new Set<string>();
+const streakWindowOpenInFlight = new Set<string>();
+
+function streakLaunchUrl(domain: string): string {
+  const raw = domain.trim().toLowerCase();
+  try {
+    const prefixed =
+      raw.startsWith("http://") || raw.startsWith("https://")
+        ? raw
+        : `https://${raw}`;
+    const host = new URL(prefixed).hostname.replace(/^www\./i, "");
+    return `https://${host}/`;
+  } catch {
+    const host = raw.replace(/^www\./, "").split("/")[0] ?? raw;
+    return `https://${host}/`;
+  }
+}
 
 /**
  * Build a file:// URL from Chrome's absolute download path (e.g. C:\Users\... or /home/...).
@@ -192,7 +273,7 @@ async function extractMetadata(item: chrome.downloads.DownloadItem): Promise<{
   sourceDomain: string;
   durationMs: number;
 }> {
-  const filename = extractFilename(item.filename ?? "");
+  const filename = resolveDownloadBasename(item);
   const url = item.finalUrl ?? item.url ?? "";
   const size =
     typeof item.totalBytes === "number" && item.totalBytes >= 0
@@ -250,74 +331,29 @@ async function fetchWithRetry(
     : new Error("Request failed after retries");
 }
 
-function normalizeDomain(input: string): string {
-  if (!input) return "";
-
-  try {
-    const url = new URL(
-      input.startsWith("http://") || input.startsWith("https://")
-        ? input
-        : `https://${input}`,
-    );
-    return (url.hostname ?? "").toLowerCase();
-  } catch {
-    return input.trim().toLowerCase();
-  }
-}
-
-function getDomainRuleValue(
-  settings: DownloadSettings,
-  sourceDomain: string,
-): DownloadRuleValue | null {
-  const normalized = normalizeDomain(sourceDomain);
-  if (!normalized) return null;
-
-  const rule = settings.domainRules.find(
-    (item) => item.domain.toLowerCase() === normalized,
-  );
-  return rule?.rule ?? null;
-}
-
 interface TrackingPolicyDecision {
   shouldTrack: boolean;
-  blockedBy: "master-toggle" | "domain-rule" | null;
+  blockedBy: "master-toggle" | null;
 }
 
 function evaluateTrackingPolicy(
   settings: DownloadSettings,
-  sourceDomain: string,
 ): TrackingPolicyDecision {
-  // Priority 1: master toggles
   if (!settings.trackingEnabled) {
     return { shouldTrack: false, blockedBy: "master-toggle" };
-  }
-
-  // Priority 2: domain rules
-  const domainRule = getDomainRuleValue(settings, sourceDomain);
-  if (domainRule === "dont_track") {
-    return { shouldTrack: false, blockedBy: "domain-rule" };
   }
 
   return { shouldTrack: true, blockedBy: null };
 }
 
-function shouldTrackEvent(
-  settings: DownloadSettings,
-  sourceDomain: string,
-): boolean {
-  return evaluateTrackingPolicy(settings, sourceDomain).shouldTrack;
+function shouldTrackEvent(settings: DownloadSettings): boolean {
+  return evaluateTrackingPolicy(settings).shouldTrack;
 }
 
 function getRoutingFolderForCategory(
   settings: DownloadSettings,
-  sourceDomain: string,
   category: FileCategory,
 ): string | null {
-  const trackingPolicy = evaluateTrackingPolicy(settings, sourceDomain);
-  if (!trackingPolicy.shouldTrack) {
-    return null;
-  }
-
   if (!settings.routingEnabled) {
     return null;
   }
@@ -343,7 +379,7 @@ async function getStoredSettings(): Promise<DownloadSettings> {
       const stored = result[SETTINGS_STORAGE_KEY] as
         | DownloadSettings
         | undefined;
-      resolve(stored ?? DEFAULT_SETTINGS);
+      resolve(normalizeDownloadSettings(stored));
     });
   });
 }
@@ -351,8 +387,9 @@ async function getStoredSettings(): Promise<DownloadSettings> {
 async function persistDownloadSettings(
   payload: DownloadSettingsSyncPayload,
 ): Promise<void> {
+  const normalized = normalizeDownloadSettings(payload.settings);
   await chrome.storage.sync.set({
-    [SETTINGS_STORAGE_KEY]: payload.settings,
+    [SETTINGS_STORAGE_KEY]: normalized,
     [SETTINGS_SYNCED_AT_STORAGE_KEY]: payload.syncedAt,
   });
 }
@@ -393,8 +430,19 @@ async function persistBrowsingSettings(
   payload: BrowsingSettingsSyncPayload,
 ): Promise<void> {
   await chrome.storage.sync.set({
-    [BROWSING_SETTINGS_STORAGE_KEY]: payload.settings,
+    [BROWSING_SETTINGS_STORAGE_KEY]: normalizeBrowsingSettings(
+      payload.settings,
+    ),
     [BROWSING_SETTINGS_SYNCED_AT_STORAGE_KEY]: payload.syncedAt,
+  });
+}
+
+async function persistProductivityUserSettings(
+  payload: ProductivityUserSettingsSyncPayload,
+): Promise<void> {
+  await chrome.storage.sync.set({
+    [PRODUCTIVITY_USER_SETTINGS_STORAGE_KEY]: payload.settings,
+    [PRODUCTIVITY_USER_SETTINGS_SYNCED_AT_KEY]: payload.syncedAt,
   });
 }
 
@@ -430,6 +478,54 @@ async function syncBrowsingSettingsFromApi(token: string): Promise<void> {
   }
 }
 
+async function syncProductivityUserSettingsFromApi(
+  token: string,
+): Promise<void> {
+  try {
+    const response = await fetchWithRetry(`${API_BASE}/productivity/settings`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      data?: { settings?: ProductivityUserSettings };
+    };
+
+    if (!data.success || !data.data?.settings) {
+      return;
+    }
+
+    const s = data.data.settings;
+    await persistProductivityUserSettings({
+      settings: {
+        tabEvolutionEnabled:
+          typeof s.tabEvolutionEnabled === "boolean"
+            ? s.tabEvolutionEnabled
+            : DEFAULT_PRODUCTIVITY_USER_SETTINGS.tabEvolutionEnabled,
+        streakTabEvolutionEnabled:
+          typeof s.streakTabEvolutionEnabled === "boolean"
+            ? s.streakTabEvolutionEnabled
+            : DEFAULT_PRODUCTIVITY_USER_SETTINGS.streakTabEvolutionEnabled,
+        trackNewTabsInTabGroupEnabled:
+          typeof s.trackNewTabsInTabGroupEnabled === "boolean"
+            ? s.trackNewTabsInTabGroupEnabled
+            : DEFAULT_PRODUCTIVITY_USER_SETTINGS.trackNewTabsInTabGroupEnabled,
+      },
+      syncedAt: new Date().toISOString(),
+      source: "extension-fetch",
+    });
+  } catch {
+    // Ignore sync failures and keep existing cached settings.
+  }
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -451,6 +547,39 @@ async function patchRemovalConfirmed(
   });
 }
 
+async function logTabGroupActivationToApi(
+  token: string,
+  tabGroupId: string,
+): Promise<void> {
+  const id = tabGroupId.trim();
+  if (!id) {
+    return;
+  }
+
+  const response = await fetchWithRetry(
+    `${API_BASE}/productivity/tab-groups/${encodeURIComponent(id)}/activate`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Productivity activation HTTP ${response.status}`);
+  }
+}
+
+function normalizeDownloadPathForCompare(p: string): string {
+  let s = p.trim().replace(/\\/g, "/");
+  if (s.length >= 2 && /^[a-z]:/i.test(s.slice(0, 2))) {
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  return s.toLowerCase();
+}
+
 async function patchRemovalFailed(
   token: string,
   input: { savedPath: string; hash: string; reason: string },
@@ -468,18 +597,17 @@ async function patchRemovalFailed(
 async function removeDownloadedFileByPath(savedPath: string): Promise<boolean> {
   const items = await new Promise<chrome.downloads.DownloadItem[]>(
     (resolve) => {
-      chrome.downloads.search({}, (result) => {
-        resolve(result ?? []);
-      });
+      chrome.downloads.search({}, (r) => resolve(r ?? []));
     },
   );
+  const target = normalizeDownloadPathForCompare(savedPath);
 
   const matchedItem = items.find((item) => {
     if (!item.filename) {
       return false;
     }
 
-    return item.filename.toLowerCase() === savedPath.toLowerCase();
+    return normalizeDownloadPathForCompare(item.filename) === target;
   });
 
   if (matchedItem?.id === undefined) {
@@ -506,7 +634,42 @@ async function removeDownloadedFileByPath(savedPath: string): Promise<boolean> {
   return true;
 }
 
-async function handleRemoveFileEvent(
+const removalInflight = new Map<string, Promise<void>>();
+
+function removalDedupKey(payload: RemoveFilePayload): string {
+  return `${payload.hash}\0${payload.savedPath}`;
+}
+
+async function isPendingRemovalForItem(
+  token: string,
+  hash: string,
+  savedPath: string,
+): Promise<boolean> {
+  try {
+    const response = await fetchWithRetry(
+      `${API_BASE}/downloads/removals/pending`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!response.ok) return true;
+    const json = (await response.json()) as {
+      data?: { items?: { savedPath: string; hash: string }[] };
+    };
+    const items = json.data?.items ?? [];
+    const target = normalizeDownloadPathForCompare(savedPath);
+    return items.some(
+      (i) =>
+        i.hash === hash &&
+        normalizeDownloadPathForCompare(i.savedPath) === target,
+    );
+  } catch {
+    return true;
+  }
+}
+
+async function handleRemoveFileEventImpl(
   token: string,
   payload: RemoveFilePayload,
 ): Promise<void> {
@@ -514,6 +677,14 @@ async function handleRemoveFileEvent(
     const removed = await removeDownloadedFileByPath(payload.savedPath);
 
     if (!removed) {
+      const stillPending = await isPendingRemovalForItem(
+        token,
+        payload.hash,
+        payload.savedPath,
+      );
+      if (!stillPending) {
+        return;
+      }
       await patchRemovalFailed(token, {
         savedPath: payload.savedPath,
         hash: payload.hash,
@@ -535,87 +706,81 @@ async function handleRemoveFileEvent(
   }
 }
 
-function disconnectRemovalSocket(): void {
-  if (!removalSocket) {
+async function handleRemoveFileEvent(
+  token: string,
+  payload: RemoveFilePayload,
+): Promise<void> {
+  const key = removalDedupKey(payload);
+  let p = removalInflight.get(key);
+  if (p) {
+    await p;
     return;
   }
-
-  removalSocket.removeAllListeners();
-  removalSocket.disconnect();
-  removalSocket = null;
-  activeSocketToken = null;
+  p = (async () => {
+    try {
+      await handleRemoveFileEventImpl(token, payload);
+    } finally {
+      removalInflight.delete(key);
+    }
+  })();
+  removalInflight.set(key, p);
+  await p;
 }
 
-async function ensureSocketReconnectAlarm(): Promise<void> {
-  await chrome.alarms.create(SOCKET_RECONNECT_ALARM, {
-    periodInMinutes: SOCKET_RECONNECT_ALARM_MINUTES,
-  });
-}
-
-async function clearSocketReconnectAlarm(): Promise<void> {
-  await chrome.alarms.clear(SOCKET_RECONNECT_ALARM);
-}
-
-async function connectRemovalSocket(token: string): Promise<void> {
-  if (
-    removalSocket &&
-    activeSocketToken === token &&
-    (removalSocket.connected || removalSocket.active)
-  ) {
-    return;
-  }
-
-  disconnectRemovalSocket();
-
-  const reachable = await waitForApiHealth(SOCKET_BASE);
-  if (!reachable) {
-    await ensureSocketReconnectAlarm();
-    console.warn(
-      "SurfBud: API not reachable; removal socket will retry on schedule.",
+async function processPendingRemovalsViaRest(token: string): Promise<void> {
+  try {
+    const response = await fetchWithRetry(
+      `${API_BASE}/downloads/removals/pending`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      },
     );
-    return;
+    if (!response.ok) return;
+    const json = (await response.json()) as {
+      data?: { items?: { savedPath: string; hash: string }[] };
+    };
+    const items = json.data?.items ?? [];
+    for (const item of items) {
+      await handleRemoveFileEvent(token, {
+        type: "remove:file",
+        savedPath: item.savedPath,
+        hash: item.hash,
+      });
+    }
+  } catch {
+    /* ignore */
   }
-
-  const socket = io(SOCKET_BASE, {
-    auth: { token },
-    transports: ["polling", "websocket"],
-    withCredentials: true,
-    reconnection: true,
-    reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
-    reconnectionDelay: SOCKET_RECONNECT_DELAY_MS,
-    reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX_MS,
-    randomizationFactor: 0.5,
-  });
-
-  socket.on("remove:file", (payload: RemoveFilePayload) => {
-    void handleRemoveFileEvent(token, payload);
-  });
-
-  socket.io.on("reconnect_failed", () => {
-    void ensureSocketReconnectAlarm();
-  });
-
-  removalSocket = socket;
-  activeSocketToken = token;
 }
 
-async function bootstrapSocketConnection(): Promise<void> {
-  const token = await getAuthToken();
+async function ensurePendingRemovalPollAlarm(): Promise<void> {
+  await chrome.alarms.create(PENDING_REMOVAL_POLL_ALARM, {
+    periodInMinutes: PENDING_REMOVAL_POLL_MINUTES,
+  });
+}
+
+async function clearPendingRemovalPollAlarm(): Promise<void> {
+  await chrome.alarms.clear(PENDING_REMOVAL_POLL_ALARM);
+}
+
+async function bootstrapOnStartup(): Promise<void> {
+  const token = await getExtensionAuthToken();
   if (!token) {
-    disconnectRemovalSocket();
-    await clearSocketReconnectAlarm();
+    await clearPendingRemovalPollAlarm();
     return;
   }
 
   await syncDownloadSettingsFromApi(token);
   await syncBrowsingSettingsFromApi(token);
-  await connectRemovalSocket(token);
+  await syncProductivityUserSettingsFromApi(token);
+  await processPendingRemovalsViaRest(token);
+  await ensurePendingRemovalPollAlarm();
 }
 
 chrome.runtime.onMessage.addListener(
   (msg: RuntimeMessage, _sender, sendResponse): boolean => {
     if (msg.type === "AUTH_SUCCESS" && msg.payload) {
-      chrome.storage.sync
+      chrome.storage.local
         .set({
           authToken: msg.payload.token,
           user: msg.payload.user,
@@ -624,32 +789,238 @@ chrome.runtime.onMessage.addListener(
         .then(async () => {
           await syncDownloadSettingsFromApi(msg.payload.token);
           await syncBrowsingSettingsFromApi(msg.payload.token);
-          await connectRemovalSocket(msg.payload.token);
+          await syncProductivityUserSettingsFromApi(msg.payload.token);
+          await processPendingRemovalsViaRest(msg.payload.token);
+          await ensurePendingRemovalPollAlarm();
+          await flushTabEvolutionPendingQueue(async () => msg.payload.token);
           sendResponse({ ok: true });
         });
     } else if (msg.type === "SETTINGS_SYNC" && msg.payload) {
-      persistDownloadSettings(msg.payload).then(async () => {
-        const token = await getAuthToken();
-        if (token) {
-          await syncDownloadSettingsFromApi(token);
-        }
+      persistDownloadSettings(msg.payload).then(() => {
         sendResponse({ ok: true });
       });
     } else if (msg.type === "BROWSING_SETTINGS_SYNC" && msg.payload) {
-      persistBrowsingSettings(msg.payload).then(async () => {
-        const token = await getAuthToken();
-        if (token) {
-          await syncBrowsingSettingsFromApi(token);
-        }
+      persistBrowsingSettings(msg.payload).then(() => {
+        sendResponse({ ok: true });
+      });
+    } else if (msg.type === "PRODUCTIVITY_USER_SETTINGS_SYNC" && msg.payload) {
+      void persistProductivityUserSettings(msg.payload).then(() => {
         sendResponse({ ok: true });
       });
     } else if (msg.type === "AUTH_LOGOUT") {
-      disconnectRemovalSocket();
-      void clearSocketReconnectAlarm();
-      sendResponse({ ok: true });
+      void clearPendingRemovalPollAlarm();
+      clearTabGroupTrackingState();
+      void chrome.storage.local.remove([...AUTH_SESSION_KEYS], () => {
+        void chrome.storage.sync.remove([...AUTH_SESSION_KEYS], () => {
+          sendResponse({ ok: true });
+        });
+      });
     } else if (msg.type === "BROWSING_INTERACTION" && msg.payload) {
       void recordInteraction(msg.payload.kind);
       sendResponse({ ok: true });
+    } else if (msg.type === "PRODUCTIVITY_TAB_GROUPS_STATE") {
+      sendResponse({
+        ok: true,
+        openTabGroupIds: getOpenTabGroupIds(),
+        openStreakIds: getOpenStreakIds(),
+        activatingTabGroupIds: [...tabGroupActivationInFlight],
+      });
+    } else if (msg.type === "PRODUCTIVITY_OPEN_STREAK" && msg.payload) {
+      void (async () => {
+        const streakIdTrim = msg.payload.streakId.trim();
+        const send = (r: Record<string, unknown>) => sendResponse(r);
+        if (!streakIdTrim) {
+          send({
+            ok: false,
+            error: "Missing streak id",
+            openTabGroupIds: getOpenTabGroupIds(),
+            openStreakIds: getOpenStreakIds(),
+          });
+          return;
+        }
+        if (streakWindowOpenInFlight.has(streakIdTrim)) {
+          send({
+            ok: false,
+            error: "Open already in progress for this streak",
+            openTabGroupIds: getOpenTabGroupIds(),
+            openStreakIds: getOpenStreakIds(),
+          });
+          return;
+        }
+        streakWindowOpenInFlight.add(streakIdTrim);
+        try {
+          const launchUrl = streakLaunchUrl(msg.payload.domain);
+          const hostId = msg.payload.hostWindowId;
+          try {
+            if (typeof hostId === "number") {
+              try {
+                await chrome.windows.get(hostId);
+                await openUrlsInBrowserWindow(hostId, [launchUrl]);
+              } catch {
+                await openTabGroupUrls([launchUrl]);
+              }
+            } else {
+              const last = await chrome.windows.getLastFocused();
+              if (last.id !== undefined) {
+                await openUrlsInBrowserWindow(last.id, [launchUrl]);
+              } else {
+                await openTabGroupUrls([launchUrl]);
+              }
+            }
+          } catch (error: unknown) {
+            send({
+              ok: false,
+              error: getErrorMessage(error),
+              openTabGroupIds: getOpenTabGroupIds(),
+              openStreakIds: getOpenStreakIds(),
+            });
+            return;
+          }
+          send({
+            ok: true,
+            openTabGroupIds: getOpenTabGroupIds(),
+            openStreakIds: getOpenStreakIds(),
+          });
+        } catch (error: unknown) {
+          send({
+            ok: false,
+            error: getErrorMessage(error),
+            openTabGroupIds: getOpenTabGroupIds(),
+            openStreakIds: getOpenStreakIds(),
+          });
+        } finally {
+          streakWindowOpenInFlight.delete(streakIdTrim);
+        }
+      })();
+    } else if (msg.type === "PRODUCTIVITY_ACTIVATE" && msg.payload) {
+      void (async () => {
+        const openIds = (): string[] => getOpenTabGroupIds();
+
+        const payload = msg.payload;
+        const tabGroupIdTrim = payload.tabGroupId.trim();
+
+        if (tabGroupIdTrim && tabGroupActivationInFlight.has(tabGroupIdTrim)) {
+          sendResponse({
+            ok: false,
+            error: "Activation already in progress for this tab group",
+            openTabGroupIds: openIds(),
+            activatingTabGroupIds: [...tabGroupActivationInFlight],
+          });
+          return;
+        }
+
+        if (tabGroupIdTrim) {
+          tabGroupActivationInFlight.add(tabGroupIdTrim);
+        }
+        try {
+          if (tabGroupIdTrim) {
+            const focused =
+              await focusTrackedTabGroupWindowIfExists(tabGroupIdTrim);
+            if (focused) {
+              sendResponse({
+                ok: true,
+                focusedExisting: true,
+                openTabGroupIds: openIds(),
+                activatingTabGroupIds: [...tabGroupActivationInFlight],
+              });
+              return;
+            }
+          }
+
+          let urlsToOpen = payload.urls ?? [];
+          if (urlsToOpen.length === 0 && tabGroupIdTrim) {
+            const token = await getExtensionAuthToken();
+            if (!token) {
+              sendResponse({
+                ok: false,
+                error: "Not signed in",
+                openTabGroupIds: openIds(),
+                activatingTabGroupIds: [...tabGroupActivationInFlight],
+              });
+              return;
+            }
+            const launchRes = await fetchWithRetry(
+              `${API_BASE}/productivity/tab-groups/${encodeURIComponent(tabGroupIdTrim)}/launch-urls`,
+              {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+            if (!launchRes.ok) {
+              sendResponse({
+                ok: false,
+                error: `Launch URLs HTTP ${launchRes.status}`,
+                openTabGroupIds: openIds(),
+                activatingTabGroupIds: [...tabGroupActivationInFlight],
+              });
+              return;
+            }
+            const launchJson = (await launchRes.json()) as {
+              data?: { urls?: string[] };
+            };
+            urlsToOpen = launchJson.data?.urls ?? [];
+          }
+
+          if (urlsToOpen.length === 0) {
+            sendResponse({
+              ok: false,
+              error: "No URLs to open",
+              openTabGroupIds: openIds(),
+              activatingTabGroupIds: [...tabGroupActivationInFlight],
+            });
+            return;
+          }
+
+          let windowId: number | undefined;
+          try {
+            windowId = await openTabGroupUrls(urlsToOpen);
+          } catch (error: unknown) {
+            sendResponse({
+              ok: false,
+              error: getErrorMessage(error),
+              openTabGroupIds: openIds(),
+              activatingTabGroupIds: [...tabGroupActivationInFlight],
+            });
+            return;
+          }
+          await startTabEvolutionSession(
+            windowId,
+            tabGroupIdTrim,
+            getExtensionAuthToken,
+            urlsToOpen,
+          );
+
+          if (!payload.skipActivationApi && tabGroupIdTrim) {
+            const token = await getExtensionAuthToken();
+            if (token) {
+              try {
+                await logTabGroupActivationToApi(token, tabGroupIdTrim);
+              } catch {
+                console.warn(
+                  "SurfBud: tab group activation logged locally only (API failed)",
+                );
+              }
+            }
+          }
+
+          sendResponse({
+            ok: true,
+            openTabGroupIds: openIds(),
+            activatingTabGroupIds: [...tabGroupActivationInFlight],
+          });
+        } catch (error: unknown) {
+          sendResponse({
+            ok: false,
+            error: getErrorMessage(error),
+            openTabGroupIds: getOpenTabGroupIds(),
+            activatingTabGroupIds: [...tabGroupActivationInFlight],
+          });
+        } finally {
+          if (tabGroupIdTrim) {
+            tabGroupActivationInFlight.delete(tabGroupIdTrim);
+          }
+        }
+      })();
     } else {
       sendResponse({ ok: false });
     }
@@ -657,40 +1028,33 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
-void bootstrapSocketConnection();
+void bootstrapOnStartup();
+ensureSidePanelOpensOnToolbarClick();
 void (async () => {
   await finalizeOrphanedSessionOnStartup();
   await ensureBrowsingBatchAlarm();
-  await ensureSocketReconnectAlarm();
   await flushBrowsingSessionsQueue();
+  await pruneStaleTrackedWindows();
 })();
 
 chrome.runtime.onStartup.addListener(() => {
-  void bootstrapSocketConnection();
+  ensureSidePanelOpensOnToolbarClick();
+  void bootstrapOnStartup();
   void flushBrowsingSessionsQueue();
+  void pruneStaleTrackedWindows();
 });
 
 chrome.runtime.onInstalled.addListener(() => {
+  ensureSidePanelOpensOnToolbarClick();
   void (async () => {
     await ensureBrowsingBatchAlarm();
-    await ensureSocketReconnectAlarm();
     await flushBrowsingSessionsQueue();
+    await pruneStaleTrackedWindows();
   })();
 });
 
-async function getAuthToken(): Promise<string | null> {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(
-      [AUTH_STORAGE_KEY],
-      (result: { authToken?: string }) => {
-        resolve(result.authToken ?? null);
-      },
-    );
-  });
-}
-
 async function sendToBackend(payload: ApiDownloadPayload): Promise<void> {
-  const token = await getAuthToken();
+  const token = await getExtensionAuthToken();
   if (!token) {
     return;
   }
@@ -707,7 +1071,9 @@ async function sendToBackend(payload: ApiDownloadPayload): Promise<void> {
 
     if (!response.ok) {
       console.error("SurfBud: failed to send download", response.status);
+      return;
     }
+    void processPendingRemovalsViaRest(token);
   } catch (err) {
     console.error("SurfBud: failed to send download", err);
   }
@@ -715,32 +1081,23 @@ async function sendToBackend(payload: ApiDownloadPayload): Promise<void> {
 
 chrome.downloads.onDeterminingFilename.addListener((item, suggest): boolean => {
   void (async () => {
-    const filename = extractFilename(item.filename ?? "");
+    const filename = resolveDownloadBasename(item);
     if (!filename) {
       suggest();
       return;
     }
 
-    const category = inferFileCategory(filename, item.mime);
-    const sourceDomain = extractDomain(item.finalUrl ?? item.url ?? "");
+    const category = inferFileCategoryFromDownloadItem(item);
     let settings = await getStoredSettings();
-    let folderName = getRoutingFolderForCategory(
-      settings,
-      sourceDomain,
-      category,
-    );
+    let folderName = getRoutingFolderForCategory(settings, category);
 
     // If settings in extension storage are stale, refresh once from API and retry routing.
     if (!folderName && settings.routingEnabled) {
-      const token = await getAuthToken();
+      const token = await getExtensionAuthToken();
       if (token) {
         await syncDownloadSettingsFromApi(token);
         settings = await getStoredSettings();
-        folderName = getRoutingFolderForCategory(
-          settings,
-          sourceDomain,
-          category,
-        );
+        folderName = getRoutingFolderForCategory(settings, category);
       }
     }
 
@@ -774,11 +1131,18 @@ chrome.downloads.onChanged.addListener((delta) => {
     if (!item || !item.filename || !item.url) return;
 
     const metadata = await extractMetadata(item);
-    const category = inferFileCategory(metadata.filename, metadata.mimeType);
-    const settings = await getStoredSettings();
+    const category = inferFileCategoryFromDownloadItem(item);
+    let settings = await getStoredSettings();
 
-    if (!shouldTrackEvent(settings, metadata.sourceDomain)) {
-      return;
+    if (!shouldTrackEvent(settings)) {
+      const token = await getExtensionAuthToken();
+      if (token) {
+        await syncDownloadSettingsFromApi(token);
+        settings = await getStoredSettings();
+      }
+      if (!shouldTrackEvent(settings)) {
+        return;
+      }
     }
 
     const hash = await computeHashFromFile(item.filename);
@@ -852,8 +1216,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   void (async () => {
     if (alarm.name === "browsing-batch-send") {
       await handleBrowsingAlarm(alarm.name);
-    } else if (alarm.name === SOCKET_RECONNECT_ALARM) {
-      await bootstrapSocketConnection();
+    } else if (alarm.name === PENDING_REMOVAL_POLL_ALARM) {
+      const token = await getExtensionAuthToken();
+      if (token) {
+        await processPendingRemovalsViaRest(token);
+      }
     }
   })();
 });

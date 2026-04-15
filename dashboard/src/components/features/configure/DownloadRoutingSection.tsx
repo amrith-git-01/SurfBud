@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Check, Folder, FolderPlus, Pencil, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { Check, Folder, FolderPlus, Pencil, Trash2, X } from "lucide-react";
 import ReactFlow, {
   Background,
   BaseEdge,
@@ -17,22 +17,21 @@ import ReactFlow, {
   type Node,
   type NodeProps,
   type ProOptions,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import type { FileCategory, RoutingFolder } from '@/api/downloads.api';
-import { FileIcon } from '@/components/ui/FileIcon';
-import { Button } from '@/components/ui/Button';
-import { TextField } from '@/components/ui/TextField';
-import { OnOffToggle } from './OnOffToggle';
-import { ConfigureSectionSkeleton } from './shared/ConfigureSectionSkeleton';
-import './DownloadRoutingSection.css';
+} from "reactflow";
+import "reactflow/dist/style.css";
+import type { FileCategory, RoutingFolder } from "@/api/downloads.api";
+import { FileIcon } from "@/components/ui/FileIcon";
+import { Button } from "@/components/ui/Button";
+import { TextField } from "@/components/ui/TextField";
+import { ConfigureSectionSkeleton } from "./shared/ConfigureSectionSkeleton";
+import "./DownloadRoutingSection.css";
 
 interface DownloadRoutingSectionProps {
   routingEnabled: boolean;
   routingFolders: RoutingFolder[];
   isLoading?: boolean;
   isDisabled?: boolean;
-  onRoutingEnabledChange: (next: boolean) => void;
+  embedded?: boolean;
   onRoutingFoldersChange: (next: RoutingFolder[]) => void;
 }
 
@@ -65,15 +64,15 @@ interface RoutingEdgeData {
 }
 
 const CATEGORY_META: Array<{ category: FileCategory; label: string }> = [
-  { category: 'document', label: 'Document' },
-  { category: 'video', label: 'Video' },
-  { category: 'audio', label: 'Audio' },
-  { category: 'archive', label: 'Archive' },
-  { category: 'code', label: 'Code' },
-  { category: 'image', label: 'Image' },
-  { category: 'text', label: 'Text' },
-  { category: 'executable', label: 'Executable' },
-  { category: 'other', label: 'Other' },
+  { category: "document", label: "Document" },
+  { category: "video", label: "Video" },
+  { category: "audio", label: "Audio" },
+  { category: "archive", label: "Archive" },
+  { category: "code", label: "Code" },
+  { category: "image", label: "Image" },
+  { category: "text", label: "Text" },
+  { category: "executable", label: "Executable" },
+  { category: "other", label: "Other" },
 ];
 
 const CATEGORY_NODE_POSITIONS: Array<{ x: number; y: number }> = [
@@ -97,14 +96,16 @@ function createDraftRoutingFolderId(): string {
 
 function sanitizeFolderName(input: string): string {
   return input
-    .replace(INVALID_FOLDER_CHARS_REGEX, '')
-    .replace(/\s+/g, ' ')
+    .replace(INVALID_FOLDER_CHARS_REGEX, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function getNextDefaultFolderName(folders: RoutingFolder[]): string {
-  const base = 'New Folder';
-  const existing = new Set(folders.map((folder) => folder.folderName.toLowerCase()));
+  const base = "New Folder";
+  const existing = new Set(
+    folders.map((folder) => folder.folderName.toLowerCase()),
+  );
 
   if (!existing.has(base.toLowerCase())) {
     return base;
@@ -120,16 +121,24 @@ function getNextDefaultFolderName(folders: RoutingFolder[]): string {
 
 function CategoryNode({ data }: NodeProps<CategoryNodeData>) {
   return (
-    <div className={[
-      'group flex w-[206px] items-center gap-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2.5 shadow-sm transition-all duration-200',
-      data.isInteractive ? 'hover:-translate-y-[1px] hover:border-[var(--color-primary)]' : 'opacity-70',
-    ].join(' ')}>
+    <div
+      className={[
+        "group flex w-[206px] items-center gap-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2.5 shadow-sm transition-all duration-200",
+        data.isInteractive
+          ? "hover:-translate-y-[1px] hover:border-[var(--color-primary)]"
+          : "opacity-70",
+      ].join(" ")}
+    >
       <div className="rounded-lg bg-[var(--color-primary-light)]/50 p-1">
         <FileIcon category={data.category} size="sm" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold text-[var(--color-text-heading)]">{data.label}</p>
-        <p className="mt-0.5 text-[10px] text-[var(--color-text-muted)]">Default Downloads/ when not connected</p>
+        <p className="truncate text-[13px] font-semibold text-[var(--color-text-heading)]">
+          {data.label}
+        </p>
+        <p className="mt-0.5 text-[10px] text-[var(--color-text-muted)]">
+          Default Downloads/ when not connected
+        </p>
       </div>
       <Handle
         type="source"
@@ -145,10 +154,14 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
   const isInteractive = data.isInteractive;
 
   return (
-    <div className={[
-      'w-[220px] rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2.5 shadow-sm transition-all duration-200',
-      isInteractive ? 'hover:-translate-y-[1px] hover:shadow-md' : 'opacity-70',
-    ].join(' ')}>
+    <div
+      className={[
+        "w-[220px] rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2.5 shadow-sm transition-all duration-200",
+        isInteractive
+          ? "hover:-translate-y-[1px] hover:shadow-md"
+          : "opacity-70",
+      ].join(" ")}
+    >
       <Handle
         type="target"
         position={Position.Left}
@@ -197,11 +210,11 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
               onChange={(event) => data.onDraftNameChange(event.target.value)}
               onClick={(event) => event.stopPropagation()}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') {
+                if (event.key === "Enter") {
                   event.preventDefault();
                   data.onEditCommit(data.folder._id);
                 }
-                if (event.key === 'Escape') {
+                if (event.key === "Escape") {
                   event.preventDefault();
                   data.onEditCancel();
                 }
@@ -245,7 +258,9 @@ function FolderNode({ data }: NodeProps<FolderNodeData>) {
                 </p>
               </div>
               <p className="mt-1.5 text-[10px] text-[var(--color-text-muted)]">
-                {data.connectedLabel ? `Connected: ${data.connectedLabel}` : 'Unrouted'}
+                {data.connectedLabel
+                  ? `Connected: ${data.connectedLabel}`
+                  : "Unrouted"}
               </p>
               <p className="mt-1 text-[10px] font-medium text-[var(--color-primary)]">
                 Downloads/{data.folder.folderName}/
@@ -310,7 +325,7 @@ function RoutingEdge({
       <BaseEdge
         id={id}
         path={path}
-        style={{ stroke: 'var(--color-primary)', strokeWidth: 2 }}
+        style={{ stroke: "var(--color-primary)", strokeWidth: 2 }}
       />
       {data?.canDelete ? (
         <EdgeLabelRenderer>
@@ -319,9 +334,9 @@ function RoutingEdge({
             onClick={() => data.onDisconnect(data.folderId)}
             className="nodrag nopan inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[var(--color-primary)] bg-white text-[var(--color-primary)] shadow-sm hover:bg-[var(--color-primary-light)]"
             style={{
-              position: 'absolute',
+              position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              pointerEvents: 'all',
+              pointerEvents: "all",
             }}
             aria-label="Disconnect route"
           >
@@ -338,23 +353,34 @@ export function DownloadRoutingSection({
   routingFolders,
   isLoading = false,
   isDisabled = false,
-  onRoutingEnabledChange,
+  embedded = false,
   onRoutingFoldersChange,
 }: DownloadRoutingSectionProps) {
-  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderName, setNewFolderName] = useState("");
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [editingFolderName, setEditingFolderName] = useState('');
-  const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState("");
+  const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<
+    string | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
-  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<CategoryNodeData | FolderNodeData>([]);
-  const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState<RoutingEdgeData>([]);
-  const nodeTypes = useMemo(() => ({
-    categoryNode: CategoryNode,
-    folderNode: FolderNode,
-  }), []);
-  const edgeTypes = useMemo(() => ({
-    routingEdge: RoutingEdge,
-  }), []);
+  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<
+    CategoryNodeData | FolderNodeData
+  >([]);
+  const [flowEdges, setFlowEdges, onFlowEdgesChange] =
+    useEdgesState<RoutingEdgeData>([]);
+  const nodeTypes = useMemo(
+    () => ({
+      categoryNode: CategoryNode,
+      folderNode: FolderNode,
+    }),
+    [],
+  );
+  const edgeTypes = useMemo(
+    () => ({
+      routingEdge: RoutingEdge,
+    }),
+    [],
+  );
 
   const isInteractive = routingEnabled && !isDisabled;
   const isAtLimit = routingFolders.length >= 10;
@@ -364,7 +390,9 @@ export function DownloadRoutingSection({
 
     for (const folder of routingFolders) {
       if (!folder.category) continue;
-      const label = CATEGORY_META.find((item) => item.category === folder.category)?.label;
+      const label = CATEGORY_META.find(
+        (item) => item.category === folder.category,
+      )?.label;
       if (label) {
         map.set(folder._id, label);
       }
@@ -373,85 +401,101 @@ export function DownloadRoutingSection({
     return map;
   }, [routingFolders]);
 
-  const computedNodes = useMemo<Array<Node<CategoryNodeData | FolderNodeData>>>(() => {
-    const categoryNodes: Array<Node<CategoryNodeData>> = CATEGORY_META.map((item, index) => ({
-      id: `category:${item.category}`,
-      type: 'categoryNode',
-      position: CATEGORY_NODE_POSITIONS[index] ?? { x: 32, y: 36 + index * 84 },
-      draggable: isInteractive,
-      selectable: false,
-      data: {
-        category: item.category,
-        label: item.label,
-        isInteractive,
-      },
-    }));
+  const computedNodes = useMemo<
+    Array<Node<CategoryNodeData | FolderNodeData>>
+  >(() => {
+    const categoryNodes: Array<Node<CategoryNodeData>> = CATEGORY_META.map(
+      (item, index) => ({
+        id: `category:${item.category}`,
+        type: "categoryNode",
+        position: CATEGORY_NODE_POSITIONS[index] ?? {
+          x: 32,
+          y: 36 + index * 84,
+        },
+        draggable: isInteractive,
+        selectable: false,
+        data: {
+          category: item.category,
+          label: item.label,
+          isInteractive,
+        },
+      }),
+    );
 
-    const folderNodes: Array<Node<FolderNodeData>> = routingFolders.map((folder, index) => ({
-      id: `folder:${folder._id}`,
-      type: 'folderNode',
-      position: { x: 700, y: 28 + index * 132 },
-      draggable: isInteractive,
-      selectable: false,
-      data: {
-        folder,
-        connectedLabel: connectedLabelByFolderId.get(folder._id) ?? null,
-        isInteractive,
-        isEditing: editingFolderId === folder._id,
-        isDeleteConfirming: deleteConfirmFolderId === folder._id,
-        draftName: editingFolderId === folder._id ? editingFolderName : folder.folderName,
-        onEditStart: (folderId: string, folderName: string) => {
-          setDeleteConfirmFolderId(null);
-          setEditingFolderId(folderId);
-          setEditingFolderName(folderName);
-          setError(null);
-        },
-        onDraftNameChange: (value: string) => {
-          setEditingFolderName(value);
-          setError(null);
-        },
-        onEditCommit: (folderId: string) => {
-          const sanitized = sanitizeFolderName(editingFolderName);
+    const folderNodes: Array<Node<FolderNodeData>> = routingFolders.map(
+      (folder, index) => ({
+        id: `folder:${folder._id}`,
+        type: "folderNode",
+        position: { x: 700, y: 28 + index * 132 },
+        draggable: isInteractive,
+        selectable: false,
+        data: {
+          folder,
+          connectedLabel: connectedLabelByFolderId.get(folder._id) ?? null,
+          isInteractive,
+          isEditing: editingFolderId === folder._id,
+          isDeleteConfirming: deleteConfirmFolderId === folder._id,
+          draftName:
+            editingFolderId === folder._id
+              ? editingFolderName
+              : folder.folderName,
+          onEditStart: (folderId: string, folderName: string) => {
+            setDeleteConfirmFolderId(null);
+            setEditingFolderId(folderId);
+            setEditingFolderName(folderName);
+            setError(null);
+          },
+          onDraftNameChange: (value: string) => {
+            setEditingFolderName(value);
+            setError(null);
+          },
+          onEditCommit: (folderId: string) => {
+            const sanitized = sanitizeFolderName(editingFolderName);
 
-          if (!sanitized) {
-            setError('Folder name cannot be empty');
-            return;
-          }
+            if (!sanitized) {
+              setError("Folder name cannot be empty");
+              return;
+            }
 
-          if (sanitized.length > 50) {
-            setError('Folder name must be 50 characters or fewer');
-            return;
-          }
+            if (sanitized.length > 50) {
+              setError("Folder name must be 50 characters or fewer");
+              return;
+            }
 
-          onRoutingFoldersChange(
-            routingFolders.map((item) =>
-              item._id === folderId ? { ...item, folderName: sanitized } : item,
-            ),
-          );
-          setEditingFolderId(null);
-          setEditingFolderName('');
-          setError(null);
+            onRoutingFoldersChange(
+              routingFolders.map((item) =>
+                item._id === folderId
+                  ? { ...item, folderName: sanitized }
+                  : item,
+              ),
+            );
+            setEditingFolderId(null);
+            setEditingFolderName("");
+            setError(null);
+          },
+          onEditCancel: () => {
+            setEditingFolderId(null);
+            setEditingFolderName("");
+            setError(null);
+          },
+          onDeleteStart: (folderId: string) => {
+            setEditingFolderId(null);
+            setDeleteConfirmFolderId(folderId);
+            setError(null);
+          },
+          onDeleteConfirm: (folderId: string) => {
+            onRoutingFoldersChange(
+              routingFolders.filter((item) => item._id !== folderId),
+            );
+            setDeleteConfirmFolderId(null);
+            setError(null);
+          },
+          onDeleteCancel: () => {
+            setDeleteConfirmFolderId(null);
+          },
         },
-        onEditCancel: () => {
-          setEditingFolderId(null);
-          setEditingFolderName('');
-          setError(null);
-        },
-        onDeleteStart: (folderId: string) => {
-          setEditingFolderId(null);
-          setDeleteConfirmFolderId(folderId);
-          setError(null);
-        },
-        onDeleteConfirm: (folderId: string) => {
-          onRoutingFoldersChange(routingFolders.filter((item) => item._id !== folderId));
-          setDeleteConfirmFolderId(null);
-          setError(null);
-        },
-        onDeleteCancel: () => {
-          setDeleteConfirmFolderId(null);
-        },
-      },
-    }));
+      }),
+    );
 
     return [...categoryNodes, ...folderNodes];
   }, [
@@ -471,7 +515,7 @@ export function DownloadRoutingSection({
         id: `edge:${folder._id}`,
         source: `category:${folder.category}`,
         target: `folder:${folder._id}`,
-        type: 'routingEdge',
+        type: "routingEdge",
         data: {
           folderId: folder._id,
           canDelete: isInteractive,
@@ -514,12 +558,12 @@ export function DownloadRoutingSection({
     const source = connection.source;
     const target = connection.target;
 
-    if (!source?.startsWith('category:') || !target?.startsWith('folder:')) {
+    if (!source?.startsWith("category:") || !target?.startsWith("folder:")) {
       return;
     }
 
-    const category = source.replace('category:', '') as FileCategory;
-    const folderId = target.replace('folder:', '');
+    const category = source.replace("category:", "") as FileCategory;
+    const folderId = target.replace("folder:", "");
 
     onRoutingFoldersChange(
       routingFolders.map((folder) => {
@@ -538,20 +582,24 @@ export function DownloadRoutingSection({
 
   const handleCreateFolder = (allowDefaultName = false) => {
     const typedName = sanitizeFolderName(newFolderName);
-    const sanitized = typedName || (allowDefaultName ? getNextDefaultFolderName(routingFolders) : '');
+    const sanitized =
+      typedName ||
+      (allowDefaultName ? getNextDefaultFolderName(routingFolders) : "");
 
     if (!sanitized) {
-      setError('Folder name cannot be empty');
+      setError("Folder name cannot be empty");
       return;
     }
 
     if (sanitized.length > 50) {
-      setError('Folder name must be 50 characters or fewer');
+      setError("Folder name must be 50 characters or fewer");
       return;
     }
 
     if (isAtLimit) {
-      setError('Maximum 10 folders reached. Delete a folder to create a new one.');
+      setError(
+        "Maximum 10 folders reached. Delete a folder to create a new one.",
+      );
       return;
     }
 
@@ -564,172 +612,190 @@ export function DownloadRoutingSection({
       },
     ]);
 
-    setNewFolderName('');
+    setNewFolderName("");
     setError(null);
   };
 
+  const foldersHeader = (
+    <div className="mb-4">
+      <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
+        Folders & route map
+      </h3>
+      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+        Create folders and connect file categories to decide where each download
+        is saved.
+      </p>
+    </div>
+  );
+
+  const loadingSkeletonBody = (
+    <>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="skeleton h-8 w-full rounded-lg" />
+        <div className="skeleton h-8 w-28 rounded-md" />
+      </div>
+
+      <div className="mt-4 h-[540px] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white/70 p-4">
+        <div className="grid h-full grid-cols-2 gap-6">
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="skeleton h-[58px] w-full rounded-xl" />
+            ))}
+          </div>
+          <div className="space-y-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="skeleton h-[90px] w-full rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
   if (isLoading) {
+    if (embedded) {
+      return (
+        <div className="card-metric-glass mt-4 p-5">
+          {foldersHeader}
+          {loadingSkeletonBody}
+        </div>
+      );
+    }
     return (
       <ConfigureSectionSkeleton
-        title="Download routing"
-        description="Map file categories to subfolders in your Downloads directory."
+        title="Folders & route map"
+        description="Create folders and connect file categories to decide where each download is saved."
       >
-          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-            <div>
-              <div className="skeleton h-4 w-44 rounded" />
-              <div className="skeleton mt-2 h-3 w-64 rounded" />
-            </div>
-            <div className="skeleton h-[24px] w-[44px] rounded-full" />
-          </div>
-
-          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-            <div className="skeleton h-8 w-full rounded-lg" />
-            <div className="skeleton h-8 w-28 rounded-md" />
-          </div>
-
-          <div className="mt-4 h-[540px] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white/70 p-4">
-            <div className="grid h-full grid-cols-2 gap-6">
-              <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="skeleton h-[58px] w-full rounded-xl" />
-                ))}
-              </div>
-              <div className="space-y-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="skeleton h-[90px] w-full rounded-xl" />
-                ))}
-              </div>
-            </div>
-          </div>
+        {loadingSkeletonBody}
       </ConfigureSectionSkeleton>
+    );
+  }
+
+  const cardBody = (
+    <>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <TextField
+          label="Folder name"
+          showLabel={false}
+          value={newFolderName}
+          onChange={(value) => {
+            setNewFolderName(value);
+            if (error) setError(null);
+          }}
+          onClear={() => {
+            setNewFolderName("");
+            if (error) setError(null);
+          }}
+          placeholder="Create a folder, e.g. Media"
+          className="h-8 rounded-lg border py-1.5 text-xs"
+          containerClassName="!space-y-0"
+          autoComplete="off"
+        />
+        {!isAtLimit ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => handleCreateFolder(false)}
+            disabled={!isInteractive || !newFolderName.trim()}
+            className="w-full lg:w-auto [&>span]:h-8 [&>span]:px-4 [&>span]:py-1.5"
+          >
+            <span className="inline-flex items-center gap-2">
+              <FolderPlus className="h-3.5 w-3.5" />
+              New Folder
+            </span>
+          </Button>
+        ) : null}
+      </div>
+
+      {error ? (
+        <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>
+      ) : null}
+      {isAtLimit ? (
+        <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+          Maximum 10 folders reached. Delete a folder to create a new one.
+        </p>
+      ) : null}
+      {!routingEnabled ? (
+        <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+          Routing is off. The graph is visible for review, but connections and
+          edits are disabled.
+        </p>
+      ) : null}
+
+      {routingFolders.length === 0 ? (
+        <div className="mt-4 flex h-[420px] items-center justify-center rounded-2xl border border-dashed border-[var(--color-border)] bg-white/70 px-6 text-center">
+          <div>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-primary-light)]/60 text-[var(--color-primary)]">
+              <Folder className="h-5 w-5" />
+            </div>
+            <p className="mt-4 text-sm font-semibold text-[var(--color-text-heading)]">
+              No folders yet
+            </p>
+            <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+              No folders yet. Add one using the field above to start routing
+              your downloads.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div
+          className={[
+            "mt-4 h-[540px] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white/70",
+            !routingEnabled ? "opacity-65" : "",
+          ].join(" ")}
+        >
+          <ReactFlowProvider>
+            <div className="relative h-full w-full">
+              <div className="pointer-events-none absolute inset-y-4 left-1/2 z-10 w-px -translate-x-1/2 bg-[var(--color-border)]/80" />
+
+              <ReactFlow
+                className="sb-routing-canvas"
+                nodes={flowNodes}
+                edges={flowEdges}
+                onNodesChange={onFlowNodesChange}
+                onEdgesChange={onFlowEdgesChange}
+                onConnect={handleConnect}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                fitView
+                fitViewOptions={{ padding: 0.26 }}
+                nodesDraggable={isInteractive}
+                nodesConnectable={isInteractive}
+                elementsSelectable={false}
+                zoomOnScroll
+                zoomOnPinch
+                panOnDrag={isInteractive}
+                minZoom={0.5}
+                maxZoom={1.8}
+                proOptions={FLOW_OPTIONS}
+                defaultEdgeOptions={{ type: "routingEdge" }}
+              >
+                <Controls
+                  showInteractive={false}
+                  fitViewOptions={{ padding: 0.26 }}
+                />
+                <Background color="rgba(8, 145, 178, 0.08)" gap={18} />
+              </ReactFlow>
+            </div>
+          </ReactFlowProvider>
+        </div>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="card-metric-glass mt-4 p-5">
+        {foldersHeader}
+        {cardBody}
+      </div>
     );
   }
 
   return (
     <section>
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
-          Download routing
-        </h3>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          Map file categories to subfolders in your Downloads directory.
-        </p>
-      </div>
-
-      <div className="card-metric-glass mt-4 p-5">
-        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div>
-            <p className="text-sm font-semibold text-[var(--color-text-heading)]">Auto-route Downloads</p>
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              Automatically sort files into subfolders inside your Downloads directory.
-            </p>
-          </div>
-
-          <OnOffToggle
-            checked={routingEnabled}
-            disabled={isDisabled}
-            label="Auto-route downloads"
-            onChange={onRoutingEnabledChange}
-          />
-        </div>
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <TextField
-            label="Folder name"
-            showLabel={false}
-            value={newFolderName}
-            onChange={(value) => {
-              setNewFolderName(value);
-              if (error) setError(null);
-            }}
-            onClear={() => {
-              setNewFolderName('');
-              if (error) setError(null);
-            }}
-            placeholder="Create a folder, e.g. Media"
-            className="h-8 rounded-lg border py-1.5 text-xs"
-            containerClassName="!space-y-0"
-            autoComplete="off"
-          />
-          {!isAtLimit ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => handleCreateFolder(false)}
-              disabled={!isInteractive || !newFolderName.trim()}
-              className="w-full lg:w-auto [&>span]:h-8 [&>span]:px-4 [&>span]:py-1.5"
-            >
-              <span className="inline-flex items-center gap-2">
-                <FolderPlus className="h-3.5 w-3.5" />
-                New Folder
-              </span>
-            </Button>
-          ) : null}
-        </div>
-
-        {error ? <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p> : null}
-        {isAtLimit ? (
-          <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-            Maximum 10 folders reached. Delete a folder to create a new one.
-          </p>
-        ) : null}
-        {!routingEnabled ? (
-          <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-            Routing is off. The graph is visible for review, but connections and edits are disabled.
-          </p>
-        ) : null}
-
-        {routingFolders.length === 0 ? (
-          <div className="mt-4 flex h-[420px] items-center justify-center rounded-2xl border border-dashed border-[var(--color-border)] bg-white/70 px-6 text-center">
-            <div>
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-primary-light)]/60 text-[var(--color-primary)]">
-                <Folder className="h-5 w-5" />
-              </div>
-              <p className="mt-4 text-sm font-semibold text-[var(--color-text-heading)]">No folders yet</p>
-              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-                No folders yet. Add one using the field above to start routing your downloads.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className={[
-            'mt-4 h-[540px] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white/70',
-            !routingEnabled ? 'opacity-65' : '',
-          ].join(' ')}>
-            <ReactFlowProvider>
-              <div className="relative h-full w-full">
-                <div className="pointer-events-none absolute inset-y-4 left-1/2 z-10 w-px -translate-x-1/2 bg-[var(--color-border)]/80" />
-
-                <ReactFlow
-                  className="sb-routing-canvas"
-                  nodes={flowNodes}
-                  edges={flowEdges}
-                  onNodesChange={onFlowNodesChange}
-                  onEdgesChange={onFlowEdgesChange}
-                  onConnect={handleConnect}
-                  nodeTypes={nodeTypes}
-                  edgeTypes={edgeTypes}
-                  fitView
-                  fitViewOptions={{ padding: 0.26 }}
-                  nodesDraggable={isInteractive}
-                  nodesConnectable={isInteractive}
-                  elementsSelectable={false}
-                  zoomOnScroll
-                  zoomOnPinch
-                  panOnDrag={isInteractive}
-                  minZoom={0.5}
-                  maxZoom={1.8}
-                  proOptions={FLOW_OPTIONS}
-                  defaultEdgeOptions={{ type: 'routingEdge' }}
-                >
-                  <Controls showInteractive={false} fitViewOptions={{ padding: 0.26 }} />
-                  <Background color="rgba(8, 145, 178, 0.08)" gap={18} />
-                </ReactFlow>
-              </div>
-            </ReactFlowProvider>
-          </div>
-        )}
-      </div>
+      {foldersHeader}
+      <div className="card-metric-glass mt-4 p-5">{cardBody}</div>
     </section>
   );
 }

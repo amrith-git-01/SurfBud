@@ -97,7 +97,7 @@ export function BrowsingSessionRow({
       className={clsx(
         "flex items-start gap-3 transition-colors duration-150",
         onClick ? "cursor-pointer" : "cursor-default",
-        noPadding ? "px-0 py-0" : "px-6 py-3 hover:bg-[#F8FFFE]",
+        noPadding ? "px-0 py-0" : "px-6 py-3",
         className,
       )}
     >

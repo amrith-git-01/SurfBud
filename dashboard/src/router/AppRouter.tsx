@@ -8,7 +8,7 @@ import { ConfigurePage } from "../pages/ConfigurePage";
 import { BrowsingPage } from "../pages/BrowsingPage";
 import { BrowsingConfigurePage } from "../pages/BrowsingConfigurePage";
 import { ProductivityPage } from "../pages/ProductivityPage";
-import { ReportsPage } from "../pages/ReportsPage";
+import { ProductivityConfigurePage } from "../pages/ProductivityConfigurePage";
 import { SettingsPage } from "../pages/SettingsPage";
 
 export function AppRouter() {
@@ -35,7 +35,10 @@ export function AppRouter() {
         <Route path="/browsing" element={<BrowsingPage />} />
         <Route path="/browsing/configure" element={<BrowsingConfigurePage />} />
         <Route path="/productivity" element={<ProductivityPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
+        <Route
+          path="/productivity/configure"
+          element={<ProductivityConfigurePage />}
+        />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
 
