@@ -160,7 +160,7 @@ function BrowsingCategoriesSkeleton({ hideHeading }: { hideHeading: boolean }) {
     <AnalyticsPanelSkeleton
       hideHeading={hideHeading}
       sectionTitle="Category breakdown"
-      sectionDescription="Active time grouped by site category (productive, neutral, distractive)."
+      sectionDescription="Splits your browsing time into productive, neutral, and distractive categories based on site labels."
     />
   );
 }
