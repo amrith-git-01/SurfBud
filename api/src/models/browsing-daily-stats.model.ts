@@ -11,10 +11,6 @@ export interface IBrowsingDailyStats extends Document {
   focusScore: number | null;
   sitesVisited: number;
   longestSession: number;
-  contextSwitches: number;
-  deepFocusSessions: number;
-  sessionCount: number;
-  scatteredPeriods: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,10 +27,6 @@ const browsingDailyStatsSchema = new Schema<IBrowsingDailyStats>(
     focusScore: { type: Number, default: null, min: 0, max: 100 },
     sitesVisited: { type: Number, default: 0, min: 0 },
     longestSession: { type: Number, default: 0, min: 0 },
-    contextSwitches: { type: Number, default: 0, min: 0 },
-    deepFocusSessions: { type: Number, default: 0, min: 0 },
-    sessionCount: { type: Number, default: 0, min: 0 },
-    scatteredPeriods: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );

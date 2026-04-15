@@ -4,7 +4,6 @@ import { downloadRouter } from "./download.routes";
 import { browsingRouter } from "./browsing.routes";
 import { productivityRouter } from "./productivity.routes";
 import { sseRouter } from "./sse.routes";
-
 export const rootRouter = Router();
 
 rootRouter.get("/health", (_req, res) => {

@@ -29,10 +29,6 @@ type LeanUserBrowsingMetrics = {
     sitesVisited?: number;
     longestSession?: number;
     productiveTime?: number;
-    contextSwitches?: number;
-    sessionCount?: number;
-    deepFocusSessions?: number;
-    scatteredPeriods?: number;
   };
   week?: {
     totalActiveTime?: number;
@@ -143,10 +139,6 @@ export const metricsRollupWorker = new Worker(
           set["prev.todaySitesVisited"] = t.sitesVisited ?? 0;
           set["prev.todayLongestSession"] = t.longestSession ?? 0;
           set["prev.todayProductiveTime"] = t.productiveTime ?? 0;
-          set["prev.todayContextSwitches"] = t.contextSwitches ?? 0;
-          set["prev.todaySessionCount"] = t.sessionCount ?? 0;
-          set["prev.todayDeepFocusSessions"] = t.deepFocusSessions ?? 0;
-          set["prev.todayScatteredPeriods"] = t.scatteredPeriods ?? 0;
           set.today = { ...EMPTY_USER_BROWSING_TODAY };
           set.todayDate = today;
         }
@@ -167,7 +159,9 @@ export const metricsRollupWorker = new Worker(
           set.monthStart = monthStart;
         }
 
-        const meaningfulKeys = Object.keys(set).filter((k) => k !== "updatedAt");
+        const meaningfulKeys = Object.keys(set).filter(
+          (k) => k !== "updatedAt",
+        );
         if (meaningfulKeys.length === 0) {
           return null;
         }
@@ -186,9 +180,7 @@ export const metricsRollupWorker = new Worker(
 
       if (browsingWrites.length > 0) {
         await UserBrowsingMetrics.bulkWrite(
-          browsingWrites as Parameters<
-            typeof UserBrowsingMetrics.bulkWrite
-          >[0],
+          browsingWrites as Parameters<typeof UserBrowsingMetrics.bulkWrite>[0],
           { ordered: false },
         );
       }

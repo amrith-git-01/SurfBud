@@ -19,7 +19,6 @@ import {
   getMondayString,
   getMonthStartString,
   getStatsPeriodDateBounds,
-  hourOfDayInTimezone,
   toDateString,
 } from "../utils/date.utils";
 import { logger } from "../utils/logger";
@@ -28,11 +27,6 @@ import type {
   IUserBrowsingMetricsPrev,
   IUserBrowsingMetricsToday,
 } from "../models/user-browsing-metrics.model";
-
-const MICRO_SESSION_SECONDS = 60;
-const DEEP_FOCUS_MIN_SECONDS = 30 * 60;
-/** Spec §9.2 — count local hours where domain switches reach this threshold. */
-const SCATTERED_SWITCHES_PER_HOUR_THRESHOLD = 10;
 
 export function calculateFocusScore(
   productiveSeconds: number,
@@ -87,10 +81,6 @@ function emptyToday(): IUserBrowsingMetricsToday {
     productiveTime: 0,
     distractingTime: 0,
     neutralTime: 0,
-    contextSwitches: 0,
-    deepFocusSessions: 0,
-    sessionCount: 0,
-    scatteredPeriods: 0,
     topCategorySlug: null,
   };
 }
@@ -116,61 +106,11 @@ const DEFAULT_USER_BROWSING_PREV: IUserBrowsingMetricsPrev = {
   todaySitesVisited: 0,
   todayLongestSession: 0,
   todayProductiveTime: 0,
-  todayContextSwitches: 0,
-  todaySessionCount: 0,
-  todayDeepFocusSessions: 0,
-  todayScatteredPeriods: 0,
   weekTotalTime: 0,
   weekFocusScore: null,
   monthTotalTime: 0,
   monthFocusScore: null,
 };
-
-function countContextSwitches(
-  rows: { domain: string; durationSeconds: number }[],
-): number {
-  const relevant = rows.filter(
-    (r) => r.durationSeconds >= MICRO_SESSION_SECONDS,
-  );
-  let n = 0;
-  for (let i = 1; i < relevant.length; i++) {
-    const cur = relevant[i];
-    const prevRow = relevant[i - 1];
-    if (!cur || !prevRow) continue;
-    if (cur.domain !== prevRow.domain) n += 1;
-  }
-  return n;
-}
-
-function countDeepFocus(rows: { durationSeconds: number }[]): number {
-  return rows.filter((r) => r.durationSeconds >= DEEP_FOCUS_MIN_SECONDS).length;
-}
-
-function countScatteredPeriods(
-  sessions: { domain: string; durationSeconds: number; startedAt: Date }[],
-  timezone: string,
-): number {
-  const relevant = sessions.filter(
-    (r) => r.durationSeconds >= MICRO_SESSION_SECONDS,
-  );
-  if (relevant.length < 2) return 0;
-
-  const switchesPerHour = new Map<number, number>();
-  for (let i = 1; i < relevant.length; i++) {
-    const cur = relevant[i];
-    const prevRow = relevant[i - 1];
-    if (!cur || !prevRow) continue;
-    if (cur.domain === prevRow.domain) continue;
-    const hour = hourOfDayInTimezone(new Date(cur.startedAt), timezone);
-    switchesPerHour.set(hour, (switchesPerHour.get(hour) ?? 0) + 1);
-  }
-
-  let periods = 0;
-  for (const c of switchesPerHour.values()) {
-    if (c >= SCATTERED_SWITCHES_PER_HOUR_THRESHOLD) periods += 1;
-  }
-  return periods;
-}
 
 export const BrowsingMetricsService = {
   async buildSnapshotsFromExtensionSessions(
@@ -312,24 +252,6 @@ export const BrowsingMetricsService = {
       tz,
       dateStr,
     );
-    const forSwitch = sessions.map((x) => ({
-      domain: x.domain,
-      durationSeconds: x.durationSeconds,
-    }));
-    const contextSwitches = countContextSwitches(forSwitch);
-    const deepFocusSessions = countDeepFocus(
-      sessions.map((x) => ({ durationSeconds: x.durationSeconds })),
-    );
-    const sessionCount = sessions.length;
-    const scatteredPeriods = countScatteredPeriods(
-      sessions.map((x) => ({
-        domain: x.domain,
-        durationSeconds: x.durationSeconds,
-        startedAt: new Date(x.startedAt),
-      })),
-      tz,
-    );
-
     await BrowsingDailyStats.findOneAndUpdate(
       { userId: userOid, date: dateStr },
       {
@@ -342,10 +264,6 @@ export const BrowsingMetricsService = {
           focusScore,
           sitesVisited,
           longestSession,
-          contextSwitches,
-          deepFocusSessions,
-          sessionCount,
-          scatteredPeriods,
           updatedAt: new Date(),
         },
       },
@@ -416,16 +334,6 @@ export const BrowsingMetricsService = {
       todayStr,
     );
 
-    const sessionCountFromSessions = sessionsToday.length;
-    const scatteredFromSessions = countScatteredPeriods(
-      sessionsToday.map((x) => ({
-        domain: x.domain,
-        durationSeconds: x.durationSeconds,
-        startedAt: new Date(x.startedAt),
-      })),
-      tz,
-    );
-
     let sumFromSessions = 0;
     let longest = 0;
     let longestStart: string | null = null;
@@ -441,20 +349,11 @@ export const BrowsingMetricsService = {
 
     const uniqueSitesToday = new Set(sessionsToday.map((s) => s.domain)).size;
 
-    const forSwitch = sessionsToday.map((x) => ({
-      domain: x.domain,
-      durationSeconds: x.durationSeconds,
-    }));
-    const contextSwitchesFromSessions = countContextSwitches(forSwitch);
-    const deepFocusFromSessions = countDeepFocus(
-      sessionsToday.map((x) => ({ durationSeconds: x.durationSeconds })),
-    );
-
     /**
      * `totalActiveTime` / per-domain aggregates in BrowsingDailyStats can drift from raw
      * BrowsingSession rows (ordering, partial rebuilds). Longest session was taken from
      * sessions while total came from daily — impossible states like total < longest.
-     * When we have sessions for today, totals + longest + sites + switch counts come from
+     * When we have sessions for today, totals + longest + sites come from
      * that single list; productivity split is scaled from daily when possible.
      */
     let today: IUserBrowsingMetricsToday;
@@ -506,10 +405,6 @@ export const BrowsingMetricsService = {
         productiveTime,
         distractingTime,
         neutralTime,
-        contextSwitches: contextSwitchesFromSessions,
-        deepFocusSessions: deepFocusFromSessions,
-        sessionCount: sessionCountFromSessions,
-        scatteredPeriods: scatteredFromSessions,
         topCategorySlug: null,
       };
     } else if (todayRow) {
@@ -526,10 +421,6 @@ export const BrowsingMetricsService = {
         productiveTime: todayRow.productiveTime,
         distractingTime: todayRow.distractingTime,
         neutralTime: todayRow.neutralTime,
-        contextSwitches: todayRow.contextSwitches,
-        deepFocusSessions: todayRow.deepFocusSessions,
-        sessionCount: todayRow.sessionCount ?? 0,
-        scatteredPeriods: todayRow.scatteredPeriods ?? 0,
         topCategorySlug: null,
       };
     } else if (sessionsToday.length > 0) {
@@ -546,10 +437,6 @@ export const BrowsingMetricsService = {
         productiveTime: 0,
         distractingTime: 0,
         neutralTime: sumFromSessions,
-        contextSwitches: contextSwitchesFromSessions,
-        deepFocusSessions: deepFocusFromSessions,
-        sessionCount: sessionCountFromSessions,
-        scatteredPeriods: scatteredFromSessions,
         topCategorySlug: null,
       };
     } else {
@@ -667,27 +554,7 @@ export const BrowsingMetricsService = {
   async getMetricsForUser(userId: string) {
     const doc = await UserBrowsingMetricsRepository.findByUserId(userId);
     if (!doc) return null;
-    const out = serializeUserBrowsingMetrics(doc) as Record<string, unknown>;
-    const today = out.today as Record<string, unknown> | undefined;
-    const totalActiveTime = Number(today?.totalActiveTime ?? 0);
-    const storedSessionCount = Number(today?.sessionCount ?? 0);
-
-    /** Legacy / partial rollups can miss `sessionCount` while other today fields are set. */
-    if (today && totalActiveTime > 0 && storedSessionCount === 0) {
-      const user = await UserRepository.findById(userId);
-      const tz = user?.timezone ?? "UTC";
-      const todayStr = toDateString(new Date(), tz);
-      const n = await BrowsingSessionRepository.countForLocalDate(
-        userId,
-        tz,
-        todayStr,
-      );
-      if (n > 0) {
-        out.today = { ...today, sessionCount: n };
-      }
-    }
-
-    return out;
+    return serializeUserBrowsingMetrics(doc);
   },
 
   async getDailyTrend(
